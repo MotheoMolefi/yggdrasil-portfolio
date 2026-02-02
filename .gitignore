@@ -30,3 +30,8 @@ dist-ssr
 
 .next/
 *.blend1
+
+# Large Blender files
+art/*.blend
+art/*.blend1
+*.blend1
