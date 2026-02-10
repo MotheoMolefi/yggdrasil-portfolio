@@ -35,3 +35,8 @@ dist-ssr
 art/*.blend
 art/*.blend1
 *.blend1
+
+# 3D model assets (to avoid accidental redistribution)
+*.glb
+Galaxy_blue/
+Yggdrasil_Tree*.glb
