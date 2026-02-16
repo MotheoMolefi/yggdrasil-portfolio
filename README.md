@@ -199,5 +199,5 @@ Feel free to fork and customize for your own portfolio! If you make cool improve
 
 ---
 
-Built with ⚡ by [Your Name] | Powered by Norse Mythology 🌳
+Built with ⚡ by Motheo Molefi | Powered by Norse Mythology 🌳
 
