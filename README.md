@@ -16,7 +16,7 @@ An immersive 3D portfolio website inspired by Yggdrasil, the Norse world tree. N
 ### Prerequisites
 
 - Node.js (v18 or higher recommended)
-- npm or yarn
+- bun
 
 ### Installation
 
@@ -27,12 +27,12 @@ cd portfolio_site
 
 2. Install dependencies:
 ```bash
-npm install
+bun install
 ```
 
 3. Start the development server:
 ```bash
-npm run dev
+bun run dev
 ```
 
 4. Open your browser and visit:
@@ -140,7 +140,7 @@ The project is structured to easily integrate an LLM-powered assistant:
 ## 📦 Building for Production
 
 ```bash
-npm run build
+bun run build
 ```
 
 The built files will be in the `dist/` directory, ready to deploy to any static hosting service (Vercel, Netlify, GitHub Pages, etc.).
@@ -149,13 +149,13 @@ The built files will be in the `dist/` directory, ready to deploy to any static 
 
 ### Vercel (Recommended)
 ```bash
-npm install -g vercel
+bun add -g vercel
 vercel
 ```
 
 ### Netlify
 ```bash
-npm run build
+bun run build
 # Then drag the dist folder to Netlify's web interface
 ```
 
