@@ -37,6 +37,8 @@ art/*.blend1
 *.blend1
 
 # 3D model assets (to avoid accidental redistribution)
-*.glb
+# Ignore source assets, but keep public/ versions needed for app
 Galaxy_blue/
-Yggdrasil_Tree*.glb
+Yggdrasil_Tree.glb
+Yggdrasil_Tree_GoodBake1.glb
+Yggdrasil_Tree_MetallicLook.glb

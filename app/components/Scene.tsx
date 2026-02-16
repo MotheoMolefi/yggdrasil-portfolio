@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, Environment, Cloud, Clouds } from '@react-three/drei'
+import { useGLTF, Environment } from '@react-three/drei'
 import { useEffect, useRef, useState } from 'react'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -260,7 +260,13 @@ function YggdrasilTree({
             mat.visible = true
             // Glowing cyan leaves!
             mat.emissive = new THREE.Color('#00ffff')
-            mat.emissiveIntensity = 1.0
+            mat.emissiveIntensity = 1.0 // blue vein brightness
+            mat.metalness = 0.5
+            mat.roughness = 0.3
+            mat.envMapIntensity = 2.2
+            mat.polygonOffset = true
+            mat.polygonOffsetFactor = -1
+            mat.polygonOffsetUnits = -1
           } else {
             // Hide trunk from leaves model
             mat.visible = false
@@ -286,8 +292,11 @@ function YggdrasilTree({
             // Hide leaves from trunk model
             mat.visible = false
           } else {
-            // Show trunk as-is from Blender - no overrides
+            // Trunk: whiter and slightly brighter
             mat.visible = true
+            mat.color = new THREE.Color('#ffffff')
+            mat.emissive = new THREE.Color('#ffffff')
+            mat.emissiveIntensity = 0.15
           }
           mat.needsUpdate = true
         })
@@ -297,7 +306,7 @@ function YggdrasilTree({
 
   return (
     <group scale={scale}>
-      <primitive object={leavesGLB.scene} />
+      <primitive object={leavesGLB.scene} scale={trunkScale} />
       <primitive object={trunkGLB.scene} scale={trunkScale} />
     </group>
   )
@@ -306,6 +315,43 @@ function YggdrasilTree({
 // Preload both models
 useGLTF.preload('/Yggdrasil_Tree_GoodBake1.glb')
 useGLTF.preload('/Yggdrasil_Tree_MetallicLook.glb')
+
+// ============================================================================
+// CLOUD FLOOR (Blender-made)
+// Baked volumetric cloud mesh positioned at the tree's base
+// ============================================================================
+function CloudFloor({
+  position = [0, 0, 0] as [number, number, number],
+  scale = 1 as number | [number, number, number],
+  rotation = [0, 0, 0] as [number, number, number],
+}: {
+  position?: [number, number, number]
+  scale?: number | [number, number, number]
+  rotation?: [number, number, number]
+}) {
+  const { scene } = useGLTF('/clouds_with_light_mark_II.glb')
+
+  useEffect(() => {
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = new THREE.MeshStandardMaterial({
+          color: new THREE.Color('#b8bcc8'),    // Cloud surface colour (affected by environment preset)
+          roughness: 1,                         // 0 = mirror-shiny, 1 = matte
+          metalness: 0,                         // 0 = non-metal, 1 = fully metallic
+          emissive: new THREE.Color('#e8e0f0'), // Self-glow colour tint (independent of lights)
+          emissiveIntensity: 0.1,               // Self-glow brightness (0 = off, higher = brighter)
+          side: THREE.DoubleSide,               // Render both faces of the mesh
+        })
+      }
+    })
+  }, [scene])
+
+  return (
+    <primitive object={scene} position={position} scale={scale} rotation={rotation} />
+  )
+}
+
+useGLTF.preload('/clouds_with_light_mark_II.glb')
 
 // ============================================================================
 // BLOOM EFFECT
@@ -393,60 +439,61 @@ function World() {
         ]}
         background
       />
-      {/* Bright preset for material reflections (chrome trunk!) */}
-      <Environment preset="city" background={false} />
+      {/* Bright set for material reflections (chrome trunk!) */}
+      <Environment preset="dawn" background={false} />
 
-      {/* ========== LIGHT RIG (Blender-style: key + fill + rim) ========== */}
-      {/* Ambient fill */}
-      <ambientLight intensity={0.35} />
-
-      {/* Key light - main directional with shadows */}
+      {/* ========== LIGHT RIG ========== */}
+      {/* <ambientLight intensity={0.15} /> */}
       <directionalLight
         position={[8, 14, 8]}
-        intensity={2.0}
+        // intensity={0.6}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
         shadow-camera-near={0.5}
-        shadow-camera-far={80}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
+        shadow-camera-far={200}
+        shadow-camera-left={-120}
+        shadow-camera-right={120}
+        shadow-camera-top={120}
+        shadow-camera-bottom={-120}
       />
-
-      {/* Fill light - soft, neutral white (no blue tint!) */}
-      <pointLight position={[-8, 8, -8]} intensity={0.25} color="#ffffff" />
-
-      {/* Rim light - adds separation and depth */}
-      <directionalLight position={[-10, 10, -5]} intensity={0.7} />
 
 
       {/* ========== THE WORLD TREE ========== */}
       {/* Materials come from Blender — only tweak envMapIntensity here */}
       <YggdrasilTree
-        scale={[75, 85, 75]}              // Taller!
+        scale={[150, 170, 150]}            // Massive world tree
+        trunkScale={[1.4, 1, 1.4]}        // Wider trunk
         trunkEnvMapIntensity={2.5}        // Boost environment reflections
       />
 
 
-      {/* ========== CLOUD FLOOR ========== */}
-      {/* Single flat cloud layer at tree base */}
-      <Clouds material={THREE.MeshBasicMaterial}>
-        <Cloud 
-          position={[0, 0, 0]} 
-          speed={0.1} 
-          opacity={0.9}
-          bounds={[600, 10, 600]}
-          segments={100}
-          color="#ccddff"
-        />
-      </Clouds>
+      {/* ========== CLOUD FLOOR (Blender) ========== */}
+      {/* Baked volumetric cloud mesh — tree trunk passes through */}
+      <CloudFloor
+        position={[0, 10, 0]}         // Y = base of tree (adjust as needed)
+        scale={[8, 4, 8]}
+        rotation={[Math.PI, 0, 0]}    // Flip upside down via rotation instead
+      />
 
-      {/* ========== FOG (for depth separation) ========== */}
-      {/* Distance fog that fades into the galaxy */}
-      {/* args: [color, near (fog starts), far (fully opaque)] */}
-            <fog attach="fog" args={['#050510', 80, 250]} />
+      {/* Uplight — directional light shining upward into cloud floor */}
+      {/* <directionalLight
+        position={[0, -20, 0]}
+        intensity={4.0}
+        color="#aabbff"
+        castShadow
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-near={0.5}
+        shadow-camera-far={200}
+        shadow-camera-left={-120}
+        shadow-camera-right={120}
+        shadow-camera-top={120}
+        shadow-camera-bottom={-120}
+      /> */}
+
+      {/* ========== FOG (disabled) ========== */}
+      {/* <fog attach="fog" args={['#aaaabb', 50, 400]} /> */}
 
       {/* ========== CAMERA CONTROLLER ========== */}
       <CinematicCamera
@@ -456,9 +503,9 @@ function World() {
         deadZone={0.15}
         startupDelay={1000}
         minHeight={4}
-        maxHeight={150}
-        maxDistance={150}
-        treeCenter={new THREE.Vector3(0, 50, 0)}
+        maxHeight={300}
+        maxDistance={300}
+        treeCenter={new THREE.Vector3(0, 100, 0)}
       />
 
       {/* ========== BLOOM POST-PROCESSING ========== */}
@@ -532,7 +579,7 @@ export default function Scene() {
       {/* ========== THREE.JS CANVAS ========== */}
       <Canvas
         shadows
-        camera={{ position: [0, 8, 25], fov: 52, near: 0.01 }}
+        camera={{ position: [0, 8, 25], fov: 52, near: 0.1 }}
         gl={{
           antialias: true,
           outputColorSpace: THREE.SRGBColorSpace,
