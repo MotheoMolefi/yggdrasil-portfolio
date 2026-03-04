@@ -30,6 +30,7 @@ function CinematicCamera({
   maxDistance = 20,         // Maximum distance from tree center
   treeCenter = new THREE.Vector3(0, 5, 0),  // Center point of the tree (for boundary)
   locked = false,           // When true, all movement/look is disabled (for orb zoom)
+  disableLook = false,      // When true, mouse look is suppressed (e.g. hovering over chat)
   zoomTarget,               // World-space position to fly toward when locked
   onInteract,               // Called when E is pressed
   onExit,                   // Called when Escape is pressed
@@ -45,6 +46,7 @@ function CinematicCamera({
   maxDistance?: number
   treeCenter?: THREE.Vector3
   locked?: boolean
+  disableLook?: boolean
   zoomTarget?: [number, number, number] | null
   onInteract?: () => void
   onExit?: () => void
@@ -388,8 +390,12 @@ function CinematicCamera({
 
     // ========== MOUSE LOOK (only after startup delay) ==========
     if (mouseControlReady.current) {
+      // Zero out mouse input when hovering over UI (e.g. chat panel) — camera decelerates smoothly
+      const rawMouseX = disableLook ? 0 : mouseX.current
+      const rawMouseY = disableLook ? 0 : mouseY.current
+
       // YAW (horizontal turning) - velocity-based accumulation
-      let effectiveMouseX = mouseX.current
+      let effectiveMouseX = rawMouseX
       if (Math.abs(effectiveMouseX) < deadZone) effectiveMouseX = 0
       else effectiveMouseX = effectiveMouseX - Math.sign(effectiveMouseX) * deadZone
 
@@ -398,7 +404,7 @@ function CinematicCamera({
       currentYaw.current += currentYawSpeed.current
 
       // PITCH (vertical looking) - velocity-based accumulation
-      let effectiveMouseY = mouseY.current
+      let effectiveMouseY = rawMouseY
       if (Math.abs(effectiveMouseY) < deadZone) effectiveMouseY = 0
       else effectiveMouseY = effectiveMouseY - Math.sign(effectiveMouseY) * deadZone
 
@@ -1042,6 +1048,8 @@ function World({
   onGuidedReady,
   onCinematicComplete,
   chatOpen,
+  disableLook,
+  responseCount,
 }: {
   activeProjectId: string | null
   viewingProjectId: string | null
@@ -1058,6 +1066,8 @@ function World({
   onGuidedReady: () => void
   onCinematicComplete: () => void
   chatOpen: boolean
+  disableLook: boolean
+  responseCount: number
 }) {
   return (
     <>
@@ -1114,7 +1124,7 @@ function World({
       ))}
 
       {/* ========== RATATOSKR — 3D squirrel model ========== */}
-      <RatatoskrModel chatOpen={chatOpen} />
+      <RatatoskrModel chatOpen={chatOpen} responseCount={responseCount} />
 
       {/* ========== INTERACTION MANAGER (free roam only) ========== */}
       {cameraMode === 'freeRoam' && (
@@ -1143,6 +1153,7 @@ function World({
           maxDistance={4200}
           treeCenter={new THREE.Vector3(0, 95, 0)}
           locked={isLocked}
+          disableLook={disableLook}
           zoomTarget={zoomTarget}
           onInteract={onInteract}
           onExit={onExit}
@@ -1256,10 +1267,12 @@ export default function Scene() {
   }, [])
 
   const [showRatatoskr, setShowRatatoskr] = useState(false)
+  const [chatHovered, setChatHovered] = useState(false)
+  const [ratatoskrResponseCount, setRatatoskrResponseCount] = useState(0)
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyR') {
+      if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey) {
         setShowRatatoskr((v) => !v)
         return
       }
@@ -1375,6 +1388,8 @@ export default function Scene() {
           onGuidedReady={handleGuidedReady}
           onCinematicComplete={handleCinematicComplete}
           chatOpen={showRatatoskr}
+          disableLook={chatHovered}
+          responseCount={ratatoskrResponseCount}
         />
       </Canvas>
 
@@ -1535,6 +1550,9 @@ export default function Scene() {
       <RatatoskrChat
         open={showRatatoskr}
         onClose={() => setShowRatatoskr(false)}
+        onMouseEnter={() => setChatHovered(true)}
+        onMouseLeave={() => setChatHovered(false)}
+        onAssistantResponse={() => setRatatoskrResponseCount((c) => c + 1)}
       />
 
       {/* ========== PROJECT INFO PANEL ========== */}

@@ -3,10 +3,39 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
 // ── Tune this to change typing speed ──────────────────────────────────────────
-const TYPEWRITER_SPEED = 55 // characters per second — higher = faster
+const TYPEWRITER_SPEED = 30 // characters per second — higher = faster
 // ──────────────────────────────────────────────────────────────────────────────
 
-function TypewriterText({ text }: { text: string }) {
+// Split text on URLs and render links as clickable anchors
+function linkify(text: string): React.ReactNode[] {
+  const parts = text.split(/(https?:\/\/[^\s]+)/)
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#a8d8ff', textDecoration: 'underline' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  )
+}
+
+function TypewriterText({
+  text,
+  onCharTyped,
+  onDone,
+}: {
+  text: string
+  onCharTyped?: () => void
+  onDone?: () => void
+}) {
   const [displayed, setDisplayed] = useState('')
   const [done, setDone] = useState(false)
 
@@ -18,17 +47,19 @@ function TypewriterText({ text }: { text: string }) {
     const interval = setInterval(() => {
       i++
       setDisplayed(text.slice(0, i))
+      onCharTyped?.()
       if (i >= text.length) {
         clearInterval(interval)
         setDone(true)
+        onDone?.()
       }
     }, ms)
     return () => clearInterval(interval)
-  }, [text])
+  }, [text, onCharTyped, onDone])
 
   return (
     <span>
-      {displayed}
+      {linkify(displayed)}
       {!done && <span className="animate-pulse opacity-70">▍</span>}
     </span>
   )
@@ -42,19 +73,30 @@ interface Message {
 interface RatatoskrChatProps {
   open: boolean
   onClose: () => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  onAssistantResponse?: () => void
 }
 
 const GREETING: Message = {
   role: 'assistant',
-  content: "Greetings, traveller! I am Ratatoskr — messenger of Yggdrasil. This world was crafted by Motheo Molefi as a living showcase of his work: a single place where all his projects dwell, waiting to be discovered. Ask me anything about him or what he's built.",
+  content: "Greetings, traveller! I am Ratatoskr — messenger of Yggdrasil. This world was crafted by Motheo Molefi as a living showcase of his work: a single realm where all his projects dwell, awaiting exploration. Ask me anything about him or what he's built.",
 }
 
-export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
+export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeave, onAssistantResponse }: RatatoskrChatProps) {
   const [messages, setMessages] = useState<Message[]>([GREETING])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Tracks message indices that have already finished typing — prevents replay on reopen
+  const typedIndices = useRef<Set<number>>(new Set())
+
+  const scrollToBottom = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+    }
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -73,8 +115,8 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
   }, [open, onClose])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+    scrollToBottom()
+  }, [messages, loading, scrollToBottom])
 
   const send = useCallback(async () => {
     const text = input.trim()
@@ -99,6 +141,7 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
         ...prev,
         { role: 'assistant', content: data.reply ?? "The branches stir but carry no words. Try again." },
       ])
+      onAssistantResponse?.()
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -106,6 +149,7 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
       ])
     } finally {
       setLoading(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [input, loading, messages])
 
@@ -125,8 +169,10 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
   return (
     <div
       className="fixed bottom-6 left-6 z-50 flex flex-col rounded-2xl overflow-hidden pointer-events-auto"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
-        width: '340px',
+        width: '400px',
         height: '480px',
         background: 'rgba(140, 140, 160, 0.72)',
         backdropFilter: 'blur(18px)',
@@ -160,9 +206,11 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 scrollbar-thin">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 scrollbar-thin">
         {messages.map((msg, i) => {
           const isLatestAssistant = msg.role === 'assistant' && i === messages.length - 1
+          const alreadyTyped = typedIndices.current.has(i)
+          const shouldTypewrite = isLatestAssistant && open && !alreadyTyped
           return (
             <div
               key={i}
@@ -176,9 +224,19 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
                     : { background: 'rgba(0, 0, 0, 0.25)', color: 'rgba(255, 255, 255, 0.9)' }
                 }
               >
-                {isLatestAssistant && open
-                  ? <TypewriterText key={msg.content} text={msg.content} />
-                  : msg.content}
+                {shouldTypewrite
+                  ? <TypewriterText
+                      key={msg.content}
+                      text={msg.content}
+                      onCharTyped={scrollToBottom}
+                      onDone={() => { typedIndices.current.add(i) }}
+                    />
+                  : <span>
+                      {linkify(msg.content)}
+                      {isLatestAssistant && open && (
+                        <span className="animate-pulse opacity-70">▍</span>
+                      )}
+                    </span>}
               </div>
             </div>
           )
@@ -194,7 +252,6 @@ export default function RatatoskrChat({ open, onClose }: RatatoskrChatProps) {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
