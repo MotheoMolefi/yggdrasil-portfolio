@@ -12,6 +12,8 @@ import ProjectOrb from './ProjectOrb'
 import ProjectPanel from './ProjectPanel'
 import RatatoskrModel from './RatatoskrModel'
 import RatatoskrChat from './RatatoskrChat'
+import WelcomeScreen from './WelcomeScreen'
+import LoadingParticles from './LoadingParticles'
 import { projects } from '../data/projects'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
 
@@ -684,10 +686,7 @@ function CinematicOrbitCamera({ onComplete }: { onComplete?: () => void }) {
   const progress = useRef(0)
   const done = useRef(false)
 
-  const introProgress = useRef(0)
   const introReady = useRef(false)
-  const introStartPos = useRef(new THREE.Vector3())
-  const introStartLook = useRef(new THREE.Vector3())
 
   useEffect(() => {
     const loop = [...GUIDED_WAYPOINTS, GUIDED_WAYPOINTS[0]]
@@ -695,32 +694,17 @@ function CinematicOrbitCamera({ onComplete }: { onComplete?: () => void }) {
     progress.current = 0
     done.current = false
 
-    introStartPos.current.copy(camera.position)
-    const dir = new THREE.Vector3()
-    camera.getWorldDirection(dir)
-    introStartLook.current.copy(camera.position).add(dir.multiplyScalar(500))
-    introProgress.current = 0
-    introReady.current = false
+    // Snap immediately to the first waypoint so there's no jarring intro lerp
+    const wp0 = loop[0]
+    camera.position.copy(wp0.position)
+    camera.lookAt(wp0.lookAt)
+    introReady.current = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useFrame(() => {
     if (done.current) return
-
-    // Intro lerp to first waypoint
-    if (!introReady.current) {
-      introProgress.current = Math.min(1, introProgress.current + 0.004)
-      const t = introProgress.current
-      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-
-      const wp0 = waypoints.current[0]
-      camera.position.lerpVectors(introStartPos.current, wp0.position, ease)
-      const look = new THREE.Vector3().lerpVectors(introStartLook.current, wp0.lookAt, ease)
-      camera.lookAt(look)
-
-      if (introProgress.current >= 1) introReady.current = true
-      return
-    }
+    if (!introReady.current) return
 
     const wps = waypoints.current
     const maxProgress = wps.length - 1
@@ -963,28 +947,6 @@ function BloomEffect({
 }
 
 // ============================================================================
-// LOADING SCREEN
-// Shown while the GLB model is being loaded
-// ============================================================================
-function LoadingScreen({ progress }: { progress: number }) {
-  return (
-    <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center">
-      <div className="text-6xl mb-6">🌳</div>
-      <div className="text-white text-2xl mb-2 font-semibold">Yggdrasil Portfolio</div>
-      <div className="text-slate-400 text-sm mb-6">Loading World Tree...</div>
-      <div className="w-64 h-2 bg-slate-700 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-emerald-500 transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <div className="text-slate-500 text-xs mt-2">{Math.round(progress)}%</div>
-    </div>
-  )
-}
-
-
-// ============================================================================
 // INTERACTION MANAGER
 // Per-frame proximity detection: finds the nearest orb within range
 // ============================================================================
@@ -1182,16 +1144,284 @@ function World({
   )
 }
 
+const THEME_DISPLAY_NAMES: Record<string, string> = {
+  city:      'Midgard',
+  dawn:      'Alfheim',
+  forest:    'Jotunheim',
+  lobby:     'Valhalla',
+  park:      'Asgard',
+  sunset:    'Muspelheim',
+  warehouse: 'Niflheim',
+}
+
+export type ThemeUIPalette = {
+  panelBg: string
+  panelBorder: string
+  textPrimary: string
+  keyBg: string
+  keyText: string
+  divider: string
+  chatPanelBg: string
+  chatBorder: string
+  chatHeaderBorder: string
+  chatUserBubbleBg: string
+  chatUserBubbleText: string
+  chatAssistantBubbleBg: string
+  chatAssistantBubbleText: string
+  chatInputBorder: string
+  chatSendBg: string
+  linkColor: string
+}
+
+const THEME_UI_PALETTE: Record<PresetsType, ThemeUIPalette> = {
+  city: {
+    // Midgard — slightly darker lavender, white letters
+    panelBg: 'rgba(168, 155, 195, 0.74)',
+    panelBorder: '1px solid rgba(148, 132, 185, 0.55)',
+    textPrimary: '#ffffff',
+    keyBg: 'rgba(148, 132, 185, 0.55)',
+    keyText: '#ffffff',
+    divider: 'rgba(148, 132, 185, 0.55)',
+    chatPanelBg: 'rgba(168, 155, 195, 0.82)',
+    chatBorder: '1px solid rgba(148, 132, 185, 0.5)',
+    chatHeaderBorder: '1px solid rgba(148, 132, 185, 0.45)',
+    chatUserBubbleBg: 'rgba(188, 175, 218, 0.65)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(135, 118, 172, 0.55)',
+    chatAssistantBubbleText: 'rgba(255, 255, 255, 0.95)',
+    chatInputBorder: '1px solid rgba(148, 132, 185, 0.5)',
+    chatSendBg: 'rgba(148, 132, 185, 0.65)',
+    linkColor: '#b8a8e8',
+  },
+  dawn: {
+    // Alfheim — same purple background as Muspelheim; gold outlines; lighter purple key squares
+    panelBg: 'rgba(88, 72, 128, 0.72)',
+    panelBorder: '1px solid rgba(212, 175, 55, 0.55)',
+    textPrimary: '#f0e8f8',
+    keyBg: 'rgba(180, 155, 220, 0.55)',
+    keyText: '#ffffff',
+    divider: 'rgba(212, 175, 55, 0.55)',
+    chatPanelBg: 'rgba(88, 72, 128, 0.78)',
+    chatBorder: '1px solid rgba(212, 175, 55, 0.45)',
+    chatHeaderBorder: '1px solid rgba(212, 175, 55, 0.45)',
+    chatUserBubbleBg: 'rgba(160, 130, 200, 0.5)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(50, 40, 70, 0.65)',
+    chatAssistantBubbleText: 'rgba(235, 220, 255, 0.95)',
+    chatInputBorder: '1px solid rgba(212, 175, 55, 0.45)',
+    chatSendBg: 'rgba(200, 170, 230, 0.4)',
+    linkColor: '#c8b0f0',
+  },
+  forest: {
+    // Jotunheim — silver blue
+    panelBg: 'rgba(100, 120, 145, 0.72)',
+    panelBorder: '1px solid rgba(180, 200, 220, 0.45)',
+    textPrimary: '#e8f0f8',
+    keyBg: 'rgba(180, 200, 220, 0.4)',
+    keyText: '#ffffff',
+    divider: 'rgba(180, 200, 220, 0.45)',
+    chatPanelBg: 'rgba(100, 120, 145, 0.78)',
+    chatBorder: '1px solid rgba(180, 200, 220, 0.35)',
+    chatHeaderBorder: '1px solid rgba(180, 200, 220, 0.3)',
+    chatUserBubbleBg: 'rgba(140, 165, 195, 0.55)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(50, 70, 95, 0.65)',
+    chatAssistantBubbleText: 'rgba(220, 232, 248, 0.95)',
+    chatInputBorder: '1px solid rgba(180, 200, 220, 0.35)',
+    chatSendBg: 'rgba(180, 200, 220, 0.5)',
+    linkColor: '#a0c8f0',
+  },
+  lobby: {
+    // Valhalla — one more notch lighter amber brown, letters white
+    panelBg: 'rgba(145, 112, 88, 0.7)',
+    panelBorder: '1px solid rgba(242, 218, 188, 0.45)',
+    textPrimary: '#ffffff',
+    keyBg: 'rgba(242, 218, 188, 0.45)',
+    keyText: '#ffffff',
+    divider: 'rgba(242, 218, 188, 0.45)',
+    chatPanelBg: 'rgba(145, 112, 88, 0.76)',
+    chatBorder: '1px solid rgba(242, 218, 188, 0.4)',
+    chatHeaderBorder: '1px solid rgba(242, 218, 188, 0.35)',
+    chatUserBubbleBg: 'rgba(218, 188, 158, 0.55)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(68, 52, 42, 0.6)',
+    chatAssistantBubbleText: 'rgba(252, 245, 235, 0.95)',
+    chatInputBorder: '1px solid rgba(242, 218, 188, 0.35)',
+    chatSendBg: 'rgba(242, 218, 188, 0.55)',
+    linkColor: '#e8c890',
+  },
+  park: {
+    // Asgard — original neutral palette
+    panelBg: 'rgba(140, 140, 160, 0.72)',
+    panelBorder: '1px solid rgba(255, 255, 255, 0.15)',
+    textPrimary: '#ffffff',
+    keyBg: 'rgba(255, 255, 255, 0.3)',
+    keyText: '#ffffff',
+    divider: 'rgba(255, 255, 255, 0.15)',
+    chatPanelBg: 'rgba(140, 140, 160, 0.72)',
+    chatBorder: '1px solid rgba(255, 255, 255, 0.15)',
+    chatHeaderBorder: '1px solid rgba(255, 255, 255, 0.15)',
+    chatUserBubbleBg: 'rgba(255, 255, 255, 0.25)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(0, 0, 0, 0.25)',
+    chatAssistantBubbleText: 'rgba(255, 255, 255, 0.9)',
+    chatInputBorder: '1px solid rgba(255, 255, 255, 0.15)',
+    chatSendBg: 'rgba(255, 255, 255, 0.3)',
+    linkColor: '#a8d8ff',
+  },
+  sunset: {
+    // Muspelheim — midnight purple (even lighter)
+    panelBg: 'rgba(88, 72, 128, 0.72)',
+    panelBorder: '1px solid rgba(168, 140, 210, 0.5)',
+    textPrimary: '#f0eaf8',
+    keyBg: 'rgba(168, 140, 210, 0.5)',
+    keyText: '#ffffff',
+    divider: 'rgba(168, 140, 210, 0.5)',
+    chatPanelBg: 'rgba(88, 72, 128, 0.78)',
+    chatBorder: '1px solid rgba(168, 140, 210, 0.45)',
+    chatHeaderBorder: '1px solid rgba(168, 140, 210, 0.4)',
+    chatUserBubbleBg: 'rgba(130, 105, 180, 0.5)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(55, 42, 82, 0.65)',
+    chatAssistantBubbleText: 'rgba(238, 228, 252, 0.95)',
+    chatInputBorder: '1px solid rgba(168, 140, 210, 0.4)',
+    chatSendBg: 'rgba(168, 140, 210, 0.6)',
+    linkColor: '#d0c0f5',
+  },
+  warehouse: {
+    panelBg: 'rgba(75, 80, 90, 0.72)',
+    panelBorder: '1px solid rgba(170, 175, 190, 0.4)',
+    textPrimary: '#e4e8ec',
+    keyBg: 'rgba(170, 175, 190, 0.4)',
+    keyText: '#ffffff',
+    divider: 'rgba(170, 175, 190, 0.4)',
+    chatPanelBg: 'rgba(75, 80, 90, 0.78)',
+    chatBorder: '1px solid rgba(170, 175, 190, 0.3)',
+    chatHeaderBorder: '1px solid rgba(170, 175, 190, 0.25)',
+    chatUserBubbleBg: 'rgba(110, 115, 130, 0.55)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(35, 38, 45, 0.7)',
+    chatAssistantBubbleText: 'rgba(230, 232, 240, 0.95)',
+    chatInputBorder: '1px solid rgba(170, 175, 190, 0.25)',
+    chatSendBg: 'rgba(170, 175, 190, 0.45)',
+    linkColor: '#a0b8d8',
+  },
+  apartment: {
+    panelBg: 'rgba(80, 95, 120, 0.72)',
+    panelBorder: '1px solid rgba(160, 180, 220, 0.35)',
+    textPrimary: '#e8eef8',
+    keyBg: 'rgba(160, 180, 220, 0.35)',
+    keyText: '#ffffff',
+    divider: 'rgba(160, 180, 220, 0.35)',
+    chatPanelBg: 'rgba(80, 95, 120, 0.78)',
+    chatBorder: '1px solid rgba(160, 180, 220, 0.25)',
+    chatHeaderBorder: '1px solid rgba(160, 180, 220, 0.2)',
+    chatUserBubbleBg: 'rgba(120, 140, 180, 0.5)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(30, 40, 60, 0.6)',
+    chatAssistantBubbleText: 'rgba(220, 230, 255, 0.95)',
+    chatInputBorder: '1px solid rgba(160, 180, 220, 0.2)',
+    chatSendBg: 'rgba(160, 180, 220, 0.4)',
+    linkColor: '#a8c8ff',
+  },
+  night: {
+    panelBg: 'rgba(35, 40, 55, 0.78)',
+    panelBorder: '1px solid rgba(100, 110, 150, 0.3)',
+    textPrimary: '#d8e0f0',
+    keyBg: 'rgba(100, 110, 150, 0.4)',
+    keyText: '#ffffff',
+    divider: 'rgba(100, 110, 150, 0.35)',
+    chatPanelBg: 'rgba(35, 40, 55, 0.85)',
+    chatBorder: '1px solid rgba(100, 110, 150, 0.25)',
+    chatHeaderBorder: '1px solid rgba(100, 110, 150, 0.2)',
+    chatUserBubbleBg: 'rgba(80, 90, 120, 0.55)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(20, 25, 35, 0.7)',
+    chatAssistantBubbleText: 'rgba(210, 218, 240, 0.95)',
+    chatInputBorder: '1px solid rgba(100, 110, 150, 0.25)',
+    chatSendBg: 'rgba(100, 110, 150, 0.45)',
+    linkColor: '#90a8e8',
+  },
+  studio: {
+    panelBg: 'rgba(75, 80, 90, 0.72)',
+    panelBorder: '1px solid rgba(170, 175, 190, 0.4)',
+    textPrimary: '#e4e8ec',
+    keyBg: 'rgba(170, 175, 190, 0.4)',
+    keyText: '#ffffff',
+    divider: 'rgba(170, 175, 190, 0.4)',
+    chatPanelBg: 'rgba(75, 80, 90, 0.78)',
+    chatBorder: '1px solid rgba(170, 175, 190, 0.3)',
+    chatHeaderBorder: '1px solid rgba(170, 175, 190, 0.25)',
+    chatUserBubbleBg: 'rgba(110, 115, 130, 0.55)',
+    chatUserBubbleText: '#ffffff',
+    chatAssistantBubbleBg: 'rgba(35, 38, 45, 0.7)',
+    chatAssistantBubbleText: 'rgba(230, 232, 240, 0.95)',
+    chatInputBorder: '1px solid rgba(170, 175, 190, 0.25)',
+    chatSendBg: 'rgba(170, 175, 190, 0.45)',
+    linkColor: '#a0b8d8',
+  },
+}
+
+const RATATOSKR_NAVIGATE_MAP: Record<string, { id: string; position: [number, number, number] }> = {
+  nazarite:  { id: 'project-1', position: [600,  1800,  200] },
+  tictactoe: { id: 'project-3', position: [400,  2600, -400] },
+  mashonisa: { id: 'project-2', position: [-500, 2200, -300] },
+}
+
+// ============================================================================
+// LOADING SCREEN — particle effect only (for figuring out / debugging the effect)
+// ============================================================================
+function LoadingScreen() {
+  return (
+    <div className="w-full h-full bg-[#050510]">
+      <Canvas
+        camera={{ position: [0, 0, 5], fov: 60 }}
+        gl={{
+          antialias: true,
+          alpha: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1,
+        }}
+        frameloop="always"
+        className="w-full h-full"
+      >
+        <LoadingParticles />
+      </Canvas>
+    </div>
+  )
+}
+
 // ============================================================================
 // SCENE - Root Component
-// Handles loading state and renders the Canvas
 // ============================================================================
+// Set to true to keep the particle loading screen visible (for testing). Set to false for normal flow.
+const KEEP_LOADING_SCREEN = true
+
 export default function Scene() {
   const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading')
   const [progress, setProgress] = useState(0)
 
+  const [showWelcome, setShowWelcome] = useState(true)
+  const [muted, setMuted] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    const audio = new Audio('/miserere.mp3')
+    audio.loop = true
+    audio.volume = 0.10
+    audioRef.current = audio
+    return () => {
+      audio.pause()
+      audio.src = ''
+    }
+  }, [])
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = muted
+  }, [muted])
+
   const [themePreset, setThemePreset] = useState<PresetsType>('park')
-  const [cameraMode, setCameraMode] = useState<'freeRoam' | 'guided' | 'cinematic'>('guided')
+  const [cameraMode, setCameraMode] = useState<'freeRoam' | 'guided' | 'cinematic'>('cinematic')
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   useEffect(() => {
@@ -1210,10 +1440,27 @@ export default function Scene() {
     setGuidedTotal(total)
   }, [])
 
-  const handleGuidedReady = useCallback(() => {
+  const showScrollHintNow = useCallback(() => {
+    if (scrollHintTimer.current) clearTimeout(scrollHintTimer.current)
     setShowScrollHint(true)
     scrollHintTimer.current = setTimeout(() => setShowScrollHint(false), 4000)
   }, [])
+
+  const handleGuidedReady = useCallback(() => {
+    // Only show hint if the welcome screen is already gone
+    if (showWelcome) return
+    showScrollHintNow()
+  }, [showWelcome, showScrollHintNow])
+
+  const handleWelcomeDismiss = useCallback(() => {
+    setShowWelcome(false)
+    audioRef.current?.play().catch(() => {/* autoplay blocked — silently ignore */})
+    if (cameraMode === 'guided') {
+      showScrollHintNow()
+    } else {
+      setCameraMode('guided')
+    }
+  }, [cameraMode, showScrollHintNow])
 
   useEffect(() => {
     if (cameraMode !== 'guided') {
@@ -1266,6 +1513,20 @@ export default function Scene() {
     setCameraMode('guided')
   }, [])
 
+  const handleRatatoskrNavigate = useCallback((key: string) => {
+    console.log('[Ratatoskr] navigate called with key:', key)
+    const target = RATATOSKR_NAVIGATE_MAP[key]
+    if (!target) {
+      console.warn('[Ratatoskr] no target found for key:', key)
+      return
+    }
+    lastZoomTarget.current = target.position
+    setViewingProjectId(target.id)
+    setZoomReached(false)
+    setShowRatatoskr(false)
+    setCameraMode('freeRoam')
+  }, [])
+
   const [showRatatoskr, setShowRatatoskr] = useState(false)
   const [chatHovered, setChatHovered] = useState(false)
   const [ratatoskrResponseCount, setRatatoskrResponseCount] = useState(0)
@@ -1289,6 +1550,9 @@ export default function Scene() {
           return presets[(idx + 1) % presets.length]
         })
       }
+      if (e.code === 'KeyM') {
+        setMuted((m) => !m)
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
@@ -1303,7 +1567,7 @@ export default function Scene() {
 
     const updateProgress = () => {
       const total = progressPerModel.reduce((a, b) => a + b, 0) / totalModels
-      setProgress(total)
+      setProgress(Math.min(100, total))
     }
 
     const checkComplete = () => {
@@ -1314,39 +1578,34 @@ export default function Scene() {
       }
     }
 
-    // Load leaves model (GoodBake1)
     loader.load(
       '/Yggdrasil_Tree_GoodBake1.glb',
       () => checkComplete(),
       (event) => {
         if (event.lengthComputable) {
-          progressPerModel[0] = (event.loaded / event.total) * 100
+          progressPerModel[0] = Math.min(100, (event.loaded / event.total) * 100)
           updateProgress()
         }
       },
       (error) => console.error('Error loading leaves model:', error)
     )
-
-    // Load trunk model (MetallicLook)
     loader.load(
       '/Yggdrasil_Tree_MetallicLook.glb',
       () => checkComplete(),
       (event) => {
         if (event.lengthComputable) {
-          progressPerModel[1] = (event.loaded / event.total) * 100
+          progressPerModel[1] = Math.min(100, (event.loaded / event.total) * 100)
           updateProgress()
         }
       },
       (error) => console.error('Error loading trunk model:', error)
     )
-
-    // Load Ratatoskr
     loader.load(
       '/Ratatoskr.glb',
       () => checkComplete(),
       (event) => {
         if (event.lengthComputable) {
-          progressPerModel[2] = (event.loaded / event.total) * 100
+          progressPerModel[2] = Math.min(100, (event.loaded / event.total) * 100)
           updateProgress()
         }
       },
@@ -1354,9 +1613,8 @@ export default function Scene() {
     )
   }, [])
 
-  // Show loading screen while model loads
-  if (loadingState === 'loading') {
-    return <LoadingScreen progress={progress} />
+  if (loadingState === 'loading' || KEEP_LOADING_SCREEN) {
+    return <LoadingScreen />
   }
 
   return (
@@ -1419,7 +1677,7 @@ export default function Scene() {
             </div>
           </div>
 
-          {/* Scroll hint text */}
+          {/* Scroll hint text — uses theme palette */}
           <div
             className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none select-none"
             style={{
@@ -1430,14 +1688,15 @@ export default function Scene() {
             <div
               className="text-center rounded-md"
               style={{
-                background: 'rgba(140, 140, 160, 0.65)',
+                background: THEME_UI_PALETTE[themePreset].panelBg,
+                border: THEME_UI_PALETTE[themePreset].panelBorder,
                 lineHeight: 1,
                 padding: '0.4em 0.6em',
               }}
             >
             <p
               className="text-2xl tracking-[0.35em] uppercase font-bold"
-              style={{ color: '#ffffff' }}
+              style={{ color: THEME_UI_PALETTE[themePreset].textPrimary }}
             >
               Scroll to navigate
             </p>
@@ -1454,96 +1713,52 @@ export default function Scene() {
       )}
 
       {/* ========== CONTROL PANEL ========== */}
-      {!zoomReached && !isFullscreen && (
-        <div
-          className="fixed bottom-6 right-12 z-40 flex flex-col gap-2 p-3 rounded-xl"
-          style={{
-            background: 'rgba(140, 140, 160, 0.65)',
-            border: 'none',
-          }}
-        >
-          {/* Mode indicator + key hint */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className="text-[10px] uppercase tracking-widest"
-              style={{ color: '#ffffff' }}
+      {!zoomReached && !isFullscreen && !showWelcome && (() => {
+        const p = THEME_UI_PALETTE[themePreset]
+        return (
+          <div
+            className="fixed bottom-6 right-12 z-40 flex flex-col gap-2 p-3 rounded-xl"
+            style={{
+              background: p.panelBg,
+              border: p.panelBorder,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: p.textPrimary }}>
+                {cameraMode === 'freeRoam' ? 'Free Roam' : 'Guided Tour'}
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold" style={{ background: p.keyBg, color: p.keyText }}>G</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: p.textPrimary }}>Cinematic</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold" style={{ background: p.keyBg, color: p.keyText }}>C</span>
+            </div>
+            <div className="h-px w-full" style={{ background: p.divider }} />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: p.textPrimary }}>{THEME_DISPLAY_NAMES[themePreset] ?? themePreset}</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold" style={{ background: p.keyBg, color: p.keyText }}>T</span>
+            </div>
+            <div className="h-px w-full" style={{ background: p.divider }} />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: p.textPrimary }}>Ratatoskr</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold" style={{ background: p.keyBg, color: p.keyText }}>R</span>
+            </div>
+            <div className="h-px w-full" style={{ background: p.divider }} />
+            <button
+              onClick={() => setMuted((m) => !m)}
+              className="flex items-center justify-between gap-2 w-full cursor-pointer"
+              style={{ background: 'none', border: 'none', padding: 0 }}
             >
-              {cameraMode === 'freeRoam' ? 'Free Roam' : 'Guided Tour'}
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
-              style={{
-                background: 'rgba(255, 255, 255, 0.3)',
-                color: '#ffffff',
-              }}
-            >
-              G
-            </span>
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: p.textPrimary }}>{muted ? 'Music off' : 'Music on'}</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold" style={{ background: p.keyBg, color: p.keyText }}>M</span>
+            </button>
           </div>
+        )
+      })()}
 
-          {/* Cinematic key hint */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className="text-[10px] uppercase tracking-widest"
-              style={{ color: '#ffffff' }}
-            >
-              Cinematic
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
-              style={{
-                background: 'rgba(255, 255, 255, 0.3)',
-                color: '#ffffff',
-              }}
-            >
-              C
-            </span>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px w-full" style={{ background: 'rgba(255, 255, 255, 0.3)' }} />
-
-          {/* Theme indicator + key hint */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className="text-[10px] uppercase tracking-widest"
-              style={{ color: '#ffffff' }}
-            >
-              {themePreset}
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
-              style={{
-                background: 'rgba(255, 255, 255, 0.3)',
-                color: '#ffffff',
-              }}
-            >
-              T
-            </span>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px w-full" style={{ background: 'rgba(255, 255, 255, 0.3)' }} />
-
-          {/* Ratatoskr key hint */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className="text-[10px] uppercase tracking-widest"
-              style={{ color: '#ffffff' }}
-            >
-              Ratatoskr
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
-              style={{
-                background: 'rgba(255, 255, 255, 0.3)',
-                color: '#ffffff',
-              }}
-            >
-              R
-            </span>
-          </div>
-        </div>
+      {/* ========== WELCOME SCREEN ========== */}
+      {showWelcome && (
+        <WelcomeScreen onEnter={handleWelcomeDismiss} />
       )}
 
       {/* ========== RATATOSKR CHAT UI ========== */}
@@ -1553,6 +1768,8 @@ export default function Scene() {
         onMouseEnter={() => setChatHovered(true)}
         onMouseLeave={() => setChatHovered(false)}
         onAssistantResponse={() => setRatatoskrResponseCount((c) => c + 1)}
+        onNavigate={handleRatatoskrNavigate}
+        themePalette={THEME_UI_PALETTE[themePreset]}
       />
 
       {/* ========== PROJECT INFO PANEL ========== */}
