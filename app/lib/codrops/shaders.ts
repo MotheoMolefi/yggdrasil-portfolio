@@ -18,6 +18,8 @@ void main() {
 export const simFragmentVelocity = /* glsl */ `
 uniform sampler2D uOriginalPosition;
 uniform vec3 uMouse;
+uniform vec3 uMouseRayStart;
+uniform vec3 uMouseRayEnd;
 uniform float uMouseSpeed;
 uniform float uForce;
 uniform float uTime;
@@ -40,12 +42,19 @@ void main() {
     velocity += direction * pull;
   }
 
-  // Mouse repel — only when cursor is actually on the sphere this frame (avoids false repel on load / off sphere)
+  // Mouse repel along full ray through mesh — closest point on segment (entry to exit) so all faces react
   if( uMouseActive > 0.5 ) {
-    float mouseDistance = distance( position, uMouse );
-    float maxDistance = 42.0;
+    vec3 seg = uMouseRayEnd - uMouseRayStart;
+    float segLen = length(seg);
+    vec3 closest = uMouseRayStart;
+    if( segLen > 0.0001 ) {
+      float t = clamp( dot( position - uMouseRayStart, seg ) / ( segLen * segLen ), 0.0, 1.0 );
+      closest = uMouseRayStart + t * seg;
+    }
+    float mouseDistance = distance( position, closest );
+    float maxDistance = 34.0;
     if( mouseDistance < maxDistance ) {
-      vec3 pushDirection = normalize( position - uMouse );
+      vec3 pushDirection = normalize( position - closest );
       float falloff = 1.0 - mouseDistance / maxDistance;
       float basePush = 1.25 * falloff;
       float speedPush = 0.95 * falloff * uMouseSpeed;
@@ -68,6 +77,9 @@ void main() {
 export const vertexShader = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vPosition;
+varying float vBrightness;
+
+attribute float brightnessScale;
 
 uniform float uParticleSize;
 uniform sampler2D uPositionTexture;
@@ -75,6 +87,7 @@ uniform sampler2D uPositionTexture;
 
 void main() {
   vUv = uv;
+  vBrightness = brightnessScale > 0.0 ? brightnessScale : 1.0;
 
   vec3 newpos = position;
 
@@ -95,6 +108,7 @@ void main() {
 
 export const fragmentShader = /* glsl */ `
 varying vec2 vUv;
+varying float vBrightness;
 
 uniform sampler2D uVelocityTexture;
 uniform vec3 uColor;
@@ -108,8 +122,8 @@ void main() {
   vec3 velocity = texture2D( uVelocityTexture, vUv ).xyz * 100.0;
   float speed = length(velocity);
   float repelled = min(1.0, speed * 0.4);
-  float velocityAlpha = mix(uMinAlpha, uMaxAlpha, repelled);
-  vec3 finalColor = mix(uColor, uColor * 2.7, repelled);
+  float velocityAlpha = mix(uMinAlpha, uMaxAlpha, repelled) * vBrightness;
+  vec3 finalColor = mix(uColor, uColor * 1.85, repelled) * vBrightness;
 
   if (center > 0.5) { discard; }
 

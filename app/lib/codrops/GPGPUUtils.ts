@@ -6,25 +6,62 @@
 import * as THREE from 'three'
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js'
 
+export interface SampledData {
+  positions: Float32Array
+  uvs: Float32Array
+  brightnessScale: Float32Array
+}
+
 export default class GPGPUUtils {
   size: number
   number: number
   mesh: THREE.Mesh
-  sampler: ReturnType<MeshSurfaceSampler['build']>
+  sampler!: ReturnType<MeshSurfaceSampler['build']>
   positions!: Float32Array
   positionTexture!: THREE.DataTexture
   uvs!: Float32Array
   velocityTexture!: THREE.DataTexture
+  brightnessScale?: Float32Array
   _position: THREE.Vector3
 
-  constructor(mesh: THREE.Mesh, size: number) {
+  constructor(
+    mesh: THREE.Mesh,
+    size: number,
+    sampledData?: SampledData
+  ) {
     this.size = size
     this.number = size * size
     this.mesh = mesh
-    this.sampler = new MeshSurfaceSampler(mesh).build()
     this._position = new THREE.Vector3()
-    this.setupDataFromMesh()
+
+    if (sampledData) {
+      this.setupDataFromSampled(sampledData)
+    } else {
+      this.sampler = new MeshSurfaceSampler(mesh).build()
+      this.setupDataFromMesh()
+    }
     this.setupVelocitiesData()
+  }
+
+  setupDataFromSampled(sampled: SampledData) {
+    const data = new Float32Array(4 * this.number)
+    for (let i = 0; i < this.number; i++) {
+      data[4 * i] = sampled.positions[3 * i]
+      data[4 * i + 1] = sampled.positions[3 * i + 1]
+      data[4 * i + 2] = sampled.positions[3 * i + 2]
+      data[4 * i + 3] = 1
+    }
+    this.positionTexture = new THREE.DataTexture(
+      data,
+      this.size,
+      this.size,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    )
+    this.positionTexture.needsUpdate = true
+    this.positions = sampled.positions
+    this.uvs = sampled.uvs
+    this.brightnessScale = sampled.brightnessScale
   }
 
   setupDataFromMesh() {
@@ -60,6 +97,8 @@ export default class GPGPUUtils {
     this.positionTexture.needsUpdate = true
     this.positions = positions
     this.uvs = uvs
+    this.brightnessScale = new Float32Array(this.number)
+    this.brightnessScale.fill(1)
   }
 
   setupVelocitiesData() {
@@ -89,5 +128,9 @@ export default class GPGPUUtils {
 
   getVelocityTexture() {
     return this.velocityTexture
+  }
+
+  getBrightnessScale(): Float32Array | undefined {
+    return this.brightnessScale
   }
 }

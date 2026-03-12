@@ -5,7 +5,7 @@
 
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js'
-import GPGPUUtils from './GPGPUUtils'
+import GPGPUUtils, { type SampledData } from './GPGPUUtils'
 import { simFragment, simFragmentVelocity, vertexShader, fragmentShader } from './shaders'
 
 export interface GPGPUParams {
@@ -29,6 +29,8 @@ export interface GPGPUOptions {
   params: GPGPUParams
   /** If not provided, compute() only runs the GPU simulation (no mouse events). Caller can set velocityUniforms.uMouse / uMouseSpeed manually. */
   events?: { update: () => void }
+  /** When provided, particles use this data instead of sampling the model (e.g. per-character sampling with brightnessScale for hollow letters). */
+  sampledData?: SampledData
 }
 
 export default class GPGPU {
@@ -62,11 +64,11 @@ export default class GPGPU {
     this.size = options.size
     this.params = options.params
     this.events = options.events ?? { update: () => {} }
-    this.init()
+    this.init(options)
   }
 
-  init() {
-    this.utils = new GPGPUUtils(this.model, this.size)
+  init(options: GPGPUOptions) {
+    this.utils = new GPGPUUtils(this.model, this.size, options.sampledData)
     this.initGPGPU()
     this.createParticles()
   }
@@ -108,6 +110,8 @@ export default class GPGPU {
     }
 
     this.uniforms.velocityUniforms.uMouse = { value: new THREE.Vector3(1e6, 1e6, 1e6) }
+    this.uniforms.velocityUniforms.uMouseRayStart = { value: new THREE.Vector3(1e6, 1e6, 1e6) }
+    this.uniforms.velocityUniforms.uMouseRayEnd = { value: new THREE.Vector3(1e6, 1e6, 1e6) }
     this.uniforms.velocityUniforms.uMouseSpeed = { value: 0 }
     this.uniforms.velocityUniforms.uMouseActive = { value: 0 }
     this.uniforms.velocityUniforms.uOriginalPosition = { value: positionTexture }
@@ -139,7 +143,7 @@ export default class GPGPU {
       fragmentShader,
       depthWrite: false,
       depthTest: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
       transparent: true,
     })
 
@@ -149,6 +153,13 @@ export default class GPGPU {
       new THREE.BufferAttribute(this.utils.getPositions(), 3)
     )
     geometry.setAttribute('uv', new THREE.BufferAttribute(this.utils.getUVs(), 2))
+    const brightnessScale = this.utils.getBrightnessScale()
+    if (brightnessScale) {
+      geometry.setAttribute(
+        'brightnessScale',
+        new THREE.BufferAttribute(brightnessScale, 1)
+      )
+    }
 
     this.mesh = new THREE.Points(geometry, this.material)
     this.scene.add(this.mesh)
