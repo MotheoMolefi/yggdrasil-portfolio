@@ -14,6 +14,7 @@ import RatatoskrModel from './RatatoskrModel'
 import RatatoskrChat from './RatatoskrChat'
 import WelcomeScreen from './WelcomeScreen'
 import LoadingParticles from './LoadingParticles'
+import YggdrasilText from './YggdrasilText'
 import { projects } from '../data/projects'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
 
@@ -1050,10 +1051,10 @@ function World({
       <SceneEnvironmentIntensity intensity={0.3} />
 
       {/* ========== LIGHT RIG ========== */}
-      {/* <ambientLight intensity={0.15} /> */}
+      <ambientLight intensity={0.2} />
       <directionalLight
         position={[0, -10, 0]}         // Below (underlight, dramatic)
-        // intensity={0.6}
+        intensity={0.4}
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
@@ -1065,6 +1066,9 @@ function World({
         shadow-camera-bottom={-120}
       />
 
+
+      {/* ========== YGGDRASIL TEXT ========== */}
+      <YggdrasilText />
 
       {/* ========== THE WORLD TREE ========== */}
       {/* Materials come from Blender — only tweak envMapIntensity here */}
@@ -1395,7 +1399,7 @@ function LoadingScreen() {
 // SCENE - Root Component
 // ============================================================================
 // Set to true to keep the particle loading screen visible (for testing). Set to false for normal flow.
-const KEEP_LOADING_SCREEN = true
+const KEEP_LOADING_SCREEN = false
 
 export default function Scene() {
   const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading')
