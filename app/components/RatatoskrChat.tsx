@@ -76,6 +76,8 @@ interface RatatoskrChatProps {
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   onAssistantResponse?: () => void
+  onNavigate?: (key: string) => void
+  themePalette?: any
 }
 
 const GREETING: Message = {
@@ -83,7 +85,7 @@ const GREETING: Message = {
   content: "Greetings, traveller! I am Ratatoskr — messenger of Yggdrasil. This world was crafted by Motheo Molefi as a living showcase of his work: a single realm where all his projects dwell, awaiting exploration. Ask me anything about him or what he's built.",
 }
 
-export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeave, onAssistantResponse }: RatatoskrChatProps) {
+export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeave, onAssistantResponse, onNavigate, themePalette }: RatatoskrChatProps) {
   const [messages, setMessages] = useState<Message[]>([GREETING])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
