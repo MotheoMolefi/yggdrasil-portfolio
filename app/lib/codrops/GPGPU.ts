@@ -1,8 +1,3 @@
-/**
- * Codrops Dreamy Particles — GPGPU particle system (from codrops-dreamy-particles-main).
- * Uses GPUComputationRenderer + MeshSurfaceSampler for position/velocity simulation.
- */
-
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js'
 import GPGPUUtils from './GPGPUUtils'
@@ -21,13 +16,11 @@ export interface GPGPUOptions {
   camera: THREE.Camera
   renderer: THREE.WebGLRenderer
   mouse: { cursorPosition: THREE.Vector3 }
-  /** Scene or Group to add the points mesh to (e.g. a Group that moves with the camera). */
   scene: THREE.Scene | THREE.Group
   model: THREE.Mesh
   sizes: { width: number; height: number }
   debug?: unknown
   params: GPGPUParams
-  /** If not provided, compute() only runs the GPU simulation (no mouse events). Caller can set velocityUniforms.uMouse / uMouseSpeed manually. */
   events?: { update: () => void }
 }
 
@@ -72,7 +65,6 @@ export default class GPGPU {
   }
 
   initGPGPU() {
-    // Computation resolution must match particle grid (size × size), not canvas size
     this.gpgpuCompute = new GPUComputationRenderer(
       this.size,
       this.size,
@@ -113,6 +105,8 @@ export default class GPGPU {
     this.uniforms.velocityUniforms.uOriginalPosition = { value: positionTexture }
     this.uniforms.velocityUniforms.uTime = { value: 0 }
     this.uniforms.velocityUniforms.uForce = { value: this.params.force }
+    this.uniforms.velocityUniforms.uLightPosition = { value: new THREE.Vector3(0, 300, 300) }
+    this.uniforms.velocityUniforms.uHoverStrength = { value: 0 }
 
     const err = this.gpgpuCompute.init()
     if (err !== null) {
@@ -134,6 +128,11 @@ export default class GPGPU {
         uColor: { value: this.params.color },
         uMinAlpha: { value: this.params.minAlpha },
         uMaxAlpha: { value: this.params.maxAlpha },
+        uTime: { value: 0 },
+        uLightPosition: { value: new THREE.Vector3(0, 300, 300) },
+        uCameraPosition: { value: new THREE.Vector3(0, 0, 5) },
+        uBurstActive: { value: 0 },
+        uBurstPosition: { value: new THREE.Vector3(0, 0, 0) },
       },
       vertexShader,
       fragmentShader,
