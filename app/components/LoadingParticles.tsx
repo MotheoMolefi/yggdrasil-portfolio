@@ -21,6 +21,7 @@ import { getHollowGlyphSet, getLayoutCharInfos } from '@/app/lib/norseFontUtils'
 const PARTICLE_GRID_SIZE = 280
 const DISTANCE_IN_FRONT = 800
 const GOLD = new THREE.Color(0.808, 0.647, 0.239)
+const SHOW_HITBOX_DEBUG = true
 
 function makeSphereMesh(): THREE.Mesh {
   const geo = new THREE.SphereGeometry(280, 64, 64)
@@ -30,79 +31,48 @@ function makeSphereMesh(): THREE.Mesh {
 }
 
 function makeTextMesh(font: Font): THREE.Mesh {
-  const fontSize = 52
-  const lineGap = 10
-  const extrudeOpts = {
-    depth: 8,
-    curveSegments: 5,
-    bevelEnabled: false,
-    bevelThickness: 10,
-    bevelSize: 8,
+  const charInfos = getLayoutCharInfos(font, LINES, FONT_SIZE, LINE_GAP)
+  const layoutMin = new THREE.Vector3(Infinity, Infinity, Infinity)
+  const layoutMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity)
+  const geos: THREE.BufferGeometry[] = []
+  for (const { char, x, y } of charInfos) {
+    const charGeo = buildCharGeometry(font, char, FONT_SIZE)
+    if (!charGeo) continue
+    charGeo.translate(x, y, 0)
+    charGeo.computeBoundingBox()
+    const b = charGeo.boundingBox!
+    layoutMin.x = Math.min(layoutMin.x, b.min.x)
+    layoutMin.y = Math.min(layoutMin.y, b.min.y)
+    layoutMin.z = Math.min(layoutMin.z, b.min.z)
+    layoutMax.x = Math.max(layoutMax.x, b.max.x)
+    layoutMax.y = Math.max(layoutMax.y, b.max.y)
+    layoutMax.z = Math.max(layoutMax.z, b.max.z)
+    geos.push(charGeo)
   }
-
-  function buildLine(lineText: string): THREE.BufferGeometry {
-    const shapes = font.generateShapes(lineText, fontSize)
-    const geoMain = new ExtrudeGeometry(shapes, extrudeOpts)
-    const holeFillShapes: Shape[] = []
-    shapes.forEach((shape) => {
-      shape.holes.forEach((hole) => {
-        const fill = new Shape()
-        fill.curves = hole.curves.map((c: THREE.Curve<THREE.Vector2>) => c.clone())
-        holeFillShapes.push(fill)
-      })
-    })
-    if (holeFillShapes.length === 0) return geoMain
-    const geoHoles = new ExtrudeGeometry(holeFillShapes, extrudeOpts)
-    const g = mergeBufferGeometries([geoMain, geoHoles])
-    geoMain.dispose()
-    geoHoles.dispose()
-    return g
-  }
-
-  const geo1 = buildLine('Motheo Molefi')
-  const geo2 = buildLine('Presents:')
-  const geo3 = buildLine('Yggdrasil')
-  geo1.computeBoundingBox()
-  geo2.computeBoundingBox()
-  geo3.computeBoundingBox()
-  const b1 = geo1.boundingBox!
-  const b2 = geo2.boundingBox!
-  const b3 = geo3.boundingBox!
-  const refCenterX = (b1.min.x + b1.max.x) / 2
-  geo2.translate(refCenterX - (b2.min.x + b2.max.x) / 2, b1.min.y - lineGap - b2.max.y, 0)
-  geo3.translate(refCenterX - (b3.min.x + b3.max.x) / 2, b2.min.y - lineGap - b3.max.y, 0)
-
-  let geo = mergeBufferGeometries([geo1, geo2, geo3])
-  geo1.dispose()
-  geo2.dispose()
-  geo3.dispose()
-
-  geo.computeBoundingBox()
-  const bbox = geo.boundingBox!
   const center = new THREE.Vector3()
-  bbox.getCenter(center)
-  geo.translate(-center.x, -center.y, -center.z)
-  const size = new THREE.Vector3()
-  bbox.getSize(size)
+  center.addVectors(layoutMin, layoutMax).multiplyScalar(0.5)
+  const size = new THREE.Vector3().subVectors(layoutMax, layoutMin)
   const maxDim = Math.max(size.x, size.y, size.z)
-  const scale = 920 / maxDim
+  const scale = maxDim > 0 ? TARGET_SCALE / maxDim : 1
+  let geo = mergeBufferGeometries(geos)
+  geos.forEach((g) => g.dispose())
   const pos = geo.attributes.position
   for (let i = 0; i < pos.count; i++) {
-    pos.setX(i, pos.getX(i) * scale)
-    pos.setY(i, pos.getY(i) * scale)
-    pos.setZ(i, pos.getZ(i) * scale)
+    pos.setX(i, (pos.getX(i) - center.x) * scale)
+    pos.setY(i, (pos.getY(i) - center.y) * scale)
+    pos.setZ(i, (pos.getZ(i) - center.z) * scale)
   }
   pos.needsUpdate = true
   geo.computeBoundingSphere()
   geo.computeBoundingBox()
-  const hitboxPadding = 150
+  const hitboxPadding = 280
   geo.boundingBox!.expandByScalar(hitboxPadding)
   if (geo.boundingSphere) geo.boundingSphere.radius += hitboxPadding
   const mesh = new THREE.Mesh(
     geo,
     new THREE.MeshBasicMaterial({
       visible: false,
-      side: THREE.DoubleSide, // so raycaster hits all faces (hole-fill geometry can have reversed winding)
+      side: THREE.DoubleSide,
     })
   )
   mesh.visible = false
@@ -110,9 +80,9 @@ function makeTextMesh(font: Font): THREE.Mesh {
 }
 
 const LINES: [string, string, string] = ['Motheo Molefi', 'Presents:', 'Yggdrasil']
-const FONT_SIZE = 52
-const LINE_GAP = 10
-const TARGET_SCALE = 920
+const FONT_SIZE = 32
+const LINE_GAP = 4
+const TARGET_SCALE = 580
 const HOLLOW_BRIGHTNESS = 1.18
 const MS_BRIGHTNESS = 1.1
 
@@ -302,7 +272,7 @@ export default function LoadingParticles() {
       size: 1000,
       minAlpha: 0.52,
       maxAlpha: 0.82,
-      force: 0.82,
+      force: 0.90,
     }
 
     function createMeshAndInit(
@@ -316,6 +286,21 @@ export default function LoadingParticles() {
       const group = new THREE.Group()
       scene.add(group)
       group.add(mesh)
+      if (SHOW_HITBOX_DEBUG && mesh.geometry.boundingBox) {
+        const box = mesh.geometry.boundingBox
+        const size = new THREE.Vector3()
+        const center = new THREE.Vector3()
+        box.getSize(size)
+        box.getCenter(center)
+        const boxGeo = new THREE.BoxGeometry(size.x, size.y, size.z)
+        const edges = new THREE.EdgesGeometry(boxGeo)
+        const hitboxLines = new THREE.LineSegments(
+          edges,
+          new THREE.LineBasicMaterial({ color: 0x00ff88 })
+        )
+        hitboxLines.position.copy(center)
+        group.add(hitboxLines)
+      }
       groupRef.current = group
       meshRef.current = mesh
 
