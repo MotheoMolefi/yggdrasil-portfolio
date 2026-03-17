@@ -15,8 +15,7 @@ An immersive 3D portfolio website inspired by Yggdrasil, the Norse world tree. N
 
 ### Prerequisites
 
-- Node.js (v18 or higher recommended)
-- bun
+- **Bun** (this project uses Bun only; no npm/yarn)
 
 ### Installation
 
@@ -149,8 +148,7 @@ The built files will be in the `dist/` directory, ready to deploy to any static 
 
 ### Vercel (Recommended)
 ```bash
-bun add -g vercel
-vercel
+bunx vercel
 ```
 
 ### Netlify

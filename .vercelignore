@@ -1,0 +1,15 @@
+# Avoid file size limit (100 MB) — exclude large source/assets not needed for build
+node_modules
+.next
+.git
+*.blend
+*.blend1
+Squirrel_A3.blend
+art
+Galaxy_blue
+Leaf_01_GLB
+codrops-dreamy-particles-main
+
+# Optional: uncomment if deploy still fails and you don't need these at runtime
+# public/Yggdrasil_Tree_MetallicLook.glb
+# public/Yggdrasil_Tree_GoodBake1.glb

@@ -7,7 +7,7 @@ const TYPEWRITER_SPEED = 30 // characters per second — higher = faster
 // ──────────────────────────────────────────────────────────────────────────────
 
 // Split text on URLs and render links as clickable anchors
-function linkify(text: string): React.ReactNode[] {
+function linkify(text: string, linkColor = '#a8d8ff'): React.ReactNode[] {
   const parts = text.split(/(https?:\/\/[^\s]+)/)
   return parts.map((part, i) =>
     /^https?:\/\//.test(part) ? (
@@ -16,7 +16,7 @@ function linkify(text: string): React.ReactNode[] {
         href={part}
         target="_blank"
         rel="noopener noreferrer"
-        style={{ color: '#a8d8ff', textDecoration: 'underline' }}
+        style={{ color: linkColor, textDecoration: 'underline' }}
         onClick={(e) => e.stopPropagation()}
       >
         {part}
@@ -31,13 +31,22 @@ function TypewriterText({
   text,
   onCharTyped,
   onDone,
+  linkColor = '#a8d8ff',
 }: {
   text: string
   onCharTyped?: () => void
   onDone?: () => void
+  linkColor?: string
 }) {
   const [displayed, setDisplayed] = useState('')
   const [done, setDone] = useState(false)
+
+  // Store callbacks in refs so re-renders with new inline function references
+  // never trigger the effect — only a genuine text change should restart typing
+  const onCharTypedRef = useRef(onCharTyped)
+  const onDoneRef = useRef(onDone)
+  useEffect(() => { onCharTypedRef.current = onCharTyped }, [onCharTyped])
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
 
   useEffect(() => {
     setDisplayed('')
@@ -47,19 +56,19 @@ function TypewriterText({
     const interval = setInterval(() => {
       i++
       setDisplayed(text.slice(0, i))
-      onCharTyped?.()
+      onCharTypedRef.current?.()
       if (i >= text.length) {
         clearInterval(interval)
         setDone(true)
-        onDone?.()
+        onDoneRef.current?.()
       }
     }, ms)
     return () => clearInterval(interval)
-  }, [text, onCharTyped, onDone])
+  }, [text])
 
   return (
     <span>
-      {linkify(displayed)}
+      {linkify(displayed, linkColor)}
       {!done && <span className="animate-pulse opacity-70">▍</span>}
     </span>
   )
@@ -70,12 +79,42 @@ interface Message {
   content: string
 }
 
+// Subset of theme palette used by chat (Scene passes full ThemeUIPalette which includes these)
+export type ThemeUIPalette = {
+  chatPanelBg: string
+  chatBorder: string
+  chatHeaderBorder: string
+  chatUserBubbleBg: string
+  chatUserBubbleText: string
+  chatAssistantBubbleBg: string
+  chatAssistantBubbleText: string
+  chatInputBorder: string
+  chatSendBg: string
+  linkColor: string
+  textPrimary?: string
+}
+
+const DEFAULT_CHAT_PALETTE: ThemeUIPalette = {
+  chatPanelBg: 'rgba(140, 140, 160, 0.72)',
+  chatBorder: '1px solid rgba(255, 255, 255, 0.15)',
+  chatHeaderBorder: '1px solid rgba(255, 255, 255, 0.15)',
+  chatUserBubbleBg: 'rgba(255, 255, 255, 0.25)',
+  chatUserBubbleText: '#ffffff',
+  chatAssistantBubbleBg: 'rgba(0, 0, 0, 0.25)',
+  chatAssistantBubbleText: 'rgba(255, 255, 255, 0.9)',
+  chatInputBorder: '1px solid rgba(255, 255, 255, 0.15)',
+  chatSendBg: 'rgba(255, 255, 255, 0.3)',
+  linkColor: '#a8d8ff',
+}
+
 interface RatatoskrChatProps {
   open: boolean
   onClose: () => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   onAssistantResponse?: () => void
+  onNavigate?: (key: string) => void
+  themePalette?: ThemeUIPalette
 }
 
 const GREETING: Message = {
@@ -83,7 +122,8 @@ const GREETING: Message = {
   content: "Greetings, traveller! I am Ratatoskr — messenger of Yggdrasil. This world was crafted by Motheo Molefi as a living showcase of his work: a single realm where all his projects dwell, awaiting exploration. Ask me anything about him or what he's built.",
 }
 
-export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeave, onAssistantResponse }: RatatoskrChatProps) {
+export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeave, onAssistantResponse, onNavigate, themePalette }: RatatoskrChatProps) {
+  const palette = themePalette ?? DEFAULT_CHAT_PALETTE
   const [messages, setMessages] = useState<Message[]>([GREETING])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -137,11 +177,16 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
         }),
       })
       const data = await res.json()
+      console.log('[RatatoskrChat] response:', data)
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: data.reply ?? "The branches stir but carry no words. Try again." },
       ])
       onAssistantResponse?.()
+      if (data.navigateTo) {
+        console.log('[RatatoskrChat] scheduling navigate to:', data.navigateTo)
+        setTimeout(() => onNavigate?.(data.navigateTo), 2000)
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -166,6 +211,9 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
     e.stopPropagation()
   }
 
+  const headerColor = palette.textPrimary ?? '#ffffff'
+  const headerMuted = `${headerColor}99`
+
   return (
     <div
       className="fixed bottom-6 left-6 z-50 flex flex-col rounded-2xl overflow-hidden pointer-events-auto"
@@ -174,10 +222,10 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
       style={{
         width: '400px',
         height: '480px',
-        background: 'rgba(140, 140, 160, 0.72)',
+        background: palette.chatPanelBg,
         backdropFilter: 'blur(18px)',
         WebkitBackdropFilter: 'blur(18px)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
+        border: palette.chatBorder,
         opacity: open ? 1 : 0,
         transform: open ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.97)',
         transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -187,19 +235,19 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3 shrink-0"
-        style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.15)' }}
+        style={{ borderBottom: palette.chatHeaderBorder }}
       >
         <div className="flex items-center gap-2">
           <span className="text-xl">🐿️</span>
           <div>
-            <p className="text-white text-sm font-semibold leading-none">Ratatoskr</p>
-            <p className="text-white/60 text-[10px] uppercase tracking-widest mt-0.5">Messenger of Yggdrasil</p>
+            <p className="text-sm font-semibold leading-none" style={{ color: headerColor }}>Ratatoskr</p>
+            <p className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color: headerMuted }}>Messenger of Yggdrasil</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="text-white/60 hover:text-white transition-colors text-xs px-1.5 py-0.5 rounded"
-          style={{ background: 'rgba(255, 255, 255, 0.3)' }}
+          className="transition-colors text-xs px-1.5 py-0.5 rounded hover:opacity-100 opacity-80"
+          style={{ color: headerColor, background: palette.chatSendBg }}
         >
           R
         </button>
@@ -220,8 +268,8 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
                 className="max-w-[82%] text-sm leading-relaxed rounded-xl px-3 py-2"
                 style={
                   msg.role === 'user'
-                    ? { background: 'rgba(255, 255, 255, 0.25)', color: '#ffffff' }
-                    : { background: 'rgba(0, 0, 0, 0.25)', color: 'rgba(255, 255, 255, 0.9)' }
+                    ? { background: palette.chatUserBubbleBg, color: palette.chatUserBubbleText }
+                    : { background: palette.chatAssistantBubbleBg, color: palette.chatAssistantBubbleText }
                 }
               >
                 {shouldTypewrite
@@ -230,13 +278,9 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
                       text={msg.content}
                       onCharTyped={scrollToBottom}
                       onDone={() => { typedIndices.current.add(i) }}
+                      linkColor={palette.linkColor}
                     />
-                  : <span>
-                      {linkify(msg.content)}
-                      {isLatestAssistant && open && (
-                        <span className="animate-pulse opacity-70">▍</span>
-                      )}
-                    </span>}
+                  : <span>{linkify(msg.content, palette.linkColor)}</span>}
               </div>
             </div>
           )
@@ -246,7 +290,7 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
           <div className="flex justify-start">
             <div
               className="text-sm rounded-xl px-3 py-2"
-              style={{ background: 'rgba(0, 0, 0, 0.25)', color: 'rgba(255, 255, 255, 0.5)' }}
+              style={{ background: palette.chatAssistantBubbleBg, color: palette.chatAssistantBubbleText, opacity: 0.7 }}
             >
               <span className="animate-pulse">Scurrying up the branches…</span>
             </div>
@@ -257,9 +301,11 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
       {/* Input */}
       <div
         className="px-3 py-3 shrink-0 flex gap-2 items-center"
-        style={{ borderTop: '1px solid rgba(255, 255, 255, 0.15)' }}
+        style={{ borderTop: palette.chatInputBorder }}
       >
         <input
+          id="ratatoskr-chat-input"
+          name="ratatoskr-message"
           ref={inputRef}
           type="text"
           value={input}
@@ -267,13 +313,14 @@ export default function RatatoskrChat({ open, onClose, onMouseEnter, onMouseLeav
           onKeyDown={handleKeyDown}
           placeholder="Ask anything…"
           disabled={loading}
-          className="flex-1 bg-transparent text-white text-sm placeholder-white/40 outline-none"
+          className="flex-1 bg-transparent text-sm outline-none placeholder-opacity-60"
+          style={{ color: palette.chatUserBubbleText, caretColor: palette.chatUserBubbleText }}
         />
         <button
           onClick={send}
           disabled={loading || !input.trim()}
-          className="shrink-0 px-3 py-1 rounded-lg text-xs font-semibold text-white transition-opacity disabled:opacity-40"
-          style={{ background: 'rgba(255, 255, 255, 0.3)' }}
+          className="shrink-0 px-3 py-1 rounded-lg text-xs font-semibold transition-opacity disabled:opacity-40"
+          style={{ background: palette.chatSendBg, color: palette.chatUserBubbleText }}
         >
           Send
         </button>

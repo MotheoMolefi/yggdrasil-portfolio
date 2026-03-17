@@ -1375,7 +1375,7 @@ function LoadingScreen() {
   return (
     <div className="w-full h-full bg-[#050510]">
       <Canvas
-        camera={{ position: [0, 0, 5], fov: 60 }}
+        camera={{ position: [0, 0, 5], fov: 60, near: 0.1, far: 15000 }}
         gl={{
           antialias: true,
           alpha: true,
@@ -1395,7 +1395,7 @@ function LoadingScreen() {
 // SCENE - Root Component
 // ============================================================================
 // Set to true to keep the particle loading screen visible (for testing). Set to false for normal flow.
-const KEEP_LOADING_SCREEN = true
+const KEEP_LOADING_SCREEN = false
 
 export default function Scene() {
   const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading')

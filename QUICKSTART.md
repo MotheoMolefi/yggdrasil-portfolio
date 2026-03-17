@@ -5,7 +5,7 @@ Get your Yggdrasil Portfolio running in 3 steps!
 ## Step 1: Install Dependencies
 
 ```bash
-npm install
+bun install
 ```
 
 This will install all required packages including:
@@ -44,7 +44,7 @@ export const projects: Project[] = [
 ## Step 3: Run Development Server
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Visit http://localhost:3000 to see your portfolio!
@@ -83,7 +83,7 @@ In `src/components/Scene.tsx`:
 ## Building for Production
 
 ```bash
-npm run build
+bun run build
 ```
 
 Deploy the `dist/` folder to:

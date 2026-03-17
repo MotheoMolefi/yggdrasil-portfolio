@@ -18,7 +18,7 @@ Ratatoskr will serve as an intelligent guide that can:
 
 2. Install the OpenAI SDK:
 ```bash
-npm install openai
+bun add openai
 ```
 
 3. Create environment variable:
@@ -78,7 +78,7 @@ export async function chatWithRatatoskr(
 
 2. Install the Anthropic SDK:
 ```bash
-npm install @anthropic-ai/sdk
+bun add @anthropic-ai/sdk
 ```
 
 3. Create environment variable:

@@ -21,6 +21,11 @@ import { getHollowGlyphSet, getLayoutCharInfos } from '@/app/lib/norseFontUtils'
 const PARTICLE_GRID_SIZE = 280
 const DISTANCE_IN_FRONT = 800
 const GOLD = new THREE.Color(0.808, 0.647, 0.239)
+const WHITE = new THREE.Color(0.95, 0.92, 0.85)
+const COPPER = new THREE.Color(0.72, 0.45, 0.2)
+const CYAN = new THREE.Color(0.4, 0.75, 0.9)
+const PALETTE = { GOLD, WHITE, COPPER, CYAN }
+const PARTICLE_COLOR = PALETTE.CYAN
 const SHOW_HITBOX_DEBUG = false
 
 function makeSphereMesh(): THREE.Mesh {
@@ -54,7 +59,7 @@ function makeTextMesh(font: Font): THREE.Mesh {
   const size = new THREE.Vector3().subVectors(layoutMax, layoutMin)
   const maxDim = Math.max(size.x, size.y, size.z)
   const scale = maxDim > 0 ? TARGET_SCALE / maxDim : 1
-  let geo = mergeBufferGeometries(geos)
+  const geo = mergeBufferGeometries(geos)
   geos.forEach((g) => g.dispose())
   const pos = geo.attributes.position
   for (let i = 0; i < pos.count; i++) {
@@ -268,7 +273,7 @@ export default function LoadingParticles() {
     }
     const mouse = { cursorPosition: new THREE.Vector3() }
     const params = {
-      color: GOLD.clone(),
+      color: PARTICLE_COLOR.clone(),
       size: 1000,
       minAlpha: 0.52,
       maxAlpha: 0.82,

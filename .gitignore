@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 dist
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 dist-ssr
 *.local
 
@@ -47,3 +50,4 @@ Ratatoskr.glb
 public/Ratatoskr.glb
 Squirrel_A3.blend
 *.blend
+.vercel
