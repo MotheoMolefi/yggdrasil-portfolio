@@ -40,11 +40,11 @@ export interface CharLayoutInfo {
 
 /**
  * Compute (x, y) layout position for each character in the given lines,
- * matching Three.js Font layout: line 1 at y=0, line 2/3 centered under line 1, with lineGap.
+ * matching Three.js Font layout: line 1 at y=0, line 2 centered under line 1, with lineGap.
  */
 export function getLayoutCharInfos(
   font: Font,
-  lines: [string, string, string],
+  lines: [string, string],
   fontSize: number,
   lineGap: number
 ): CharLayoutInfo[] {
@@ -69,15 +69,13 @@ export function getLayoutCharInfos(
 
   const w1 = lineWidth(lines[0])
   const w2 = lineWidth(lines[1])
-  const w3 = lineWidth(lines[2])
   const refCenterX = w1 / 2
   const startX2 = refCenterX - w2 / 2
-  const startX3 = refCenterX - w3 / 2
 
   const out: CharLayoutInfo[] = []
   let y = 0
-  ;[lines[0], lines[1], lines[2]].forEach((line, lineIndex) => {
-    let x = lineIndex === 0 ? 0 : lineIndex === 1 ? startX2 : startX3
+  ;[lines[0], lines[1]].forEach((line, lineIndex) => {
+    let x = lineIndex === 0 ? 0 : startX2
     for (const char of line) {
       out.push({ char, x, y })
       const g = glyphs[char] ?? fallback

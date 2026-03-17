@@ -21,7 +21,7 @@ import { getHollowGlyphSet, getLayoutCharInfos } from '@/app/lib/norseFontUtils'
 const PARTICLE_GRID_SIZE = 280
 const DISTANCE_IN_FRONT = 800
 const GOLD = new THREE.Color(0.808, 0.647, 0.239)
-const SHOW_HITBOX_DEBUG = true
+const SHOW_HITBOX_DEBUG = false
 
 function makeSphereMesh(): THREE.Mesh {
   const geo = new THREE.SphereGeometry(280, 64, 64)
@@ -79,10 +79,10 @@ function makeTextMesh(font: Font): THREE.Mesh {
   return mesh
 }
 
-const LINES: [string, string, string] = ['Motheo Molefi', 'Presents:', 'Yggdrasil']
-const FONT_SIZE = 32
+const LINES: [string, string] = ['Motheo Molefi Presents:', 'Yggdrasil']
+const FONT_SIZE = 44
 const LINE_GAP = 4
-const TARGET_SCALE = 580
+const TARGET_SCALE = 1000
 const HOLLOW_BRIGHTNESS = 1.18
 const MS_BRIGHTNESS = 1.1
 
@@ -316,7 +316,7 @@ export default function LoadingParticles() {
         sampledData,
         events: {
           update: () => {
-            mouseSpeedRef.current *= 0.85
+            mouseSpeedRef.current *= 0.76
             const u = gpgpu.uniforms.velocityUniforms.uMouseSpeed as { value: number }
             if (u) u.value = mouseSpeedRef.current
           },
@@ -358,8 +358,8 @@ export default function LoadingParticles() {
         const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1
         mouseNDCRef.current.set(nx, ny)
         mouseSpeedRef.current = Math.min(
-          Math.hypot(nx - lastNDCRef.current.x, ny - lastNDCRef.current.y) * 800,
-          1.5
+          Math.hypot(nx - lastNDCRef.current.x, ny - lastNDCRef.current.y) * 1600,
+          3.2
         )
         lastNDCRef.current.set(nx, ny)
       }

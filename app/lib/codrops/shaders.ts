@@ -57,7 +57,7 @@ void main() {
       vec3 pushDirection = normalize( position - closest );
       float falloff = 1.0 - mouseDistance / maxDistance;
       float basePush = 1.25 * falloff;
-      float speedPush = 0.95 * falloff * uMouseSpeed;
+      float speedPush = 2.4 * falloff * uMouseSpeed;
       velocity += pushDirection * ( basePush + speedPush );
     }
   }
