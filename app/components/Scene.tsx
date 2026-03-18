@@ -14,6 +14,7 @@ import RatatoskrModel from './RatatoskrModel'
 import RatatoskrChat from './RatatoskrChat'
 import WelcomeScreen from './WelcomeScreen'
 import LoadingParticles from './LoadingParticles'
+import ParticleLoadingBar from './ParticleLoadingBar'
 import { projects } from '../data/projects'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
 
@@ -1369,11 +1370,11 @@ const RATATOSKR_NAVIGATE_MAP: Record<string, { id: string; position: [number, nu
 }
 
 // ============================================================================
-// LOADING SCREEN — particle effect only (for figuring out / debugging the effect)
+// LOADING SCREEN — particle text + 2D Norse loading bar
 // ============================================================================
-function LoadingScreen() {
+function LoadingScreen({ progress }: { progress: number }) {
   return (
-    <div className="w-full h-full bg-[#050510]">
+    <div className="w-full h-full relative bg-[#050510]">
       <Canvas
         camera={{ position: [0, 0, 5], fov: 60, near: 0.1, far: 15000 }}
         gl={{
@@ -1387,6 +1388,7 @@ function LoadingScreen() {
       >
         <LoadingParticles />
       </Canvas>
+      <ParticleLoadingBar progress={progress} />
     </div>
   )
 }
@@ -1558,63 +1560,28 @@ export default function Scene() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [isLocked])
 
-  // Pre-load all GLB models with progress tracking
+  // Pre-load all GLB models — bar only moves when each model has fully loaded (onLoad), not from download %
   useEffect(() => {
     const loader = new GLTFLoader()
     let loadedCount = 0
     const totalModels = 3
-    const progressPerModel: number[] = [0, 0, 0]
 
-    const updateProgress = () => {
-      const total = progressPerModel.reduce((a, b) => a + b, 0) / totalModels
-      setProgress(Math.min(100, total))
-    }
-
-    const checkComplete = () => {
+    const onLoad = () => {
       loadedCount++
+      setProgress(Math.min(99, (loadedCount / totalModels) * 100))
       if (loadedCount === totalModels) {
         setProgress(100)
         setTimeout(() => setLoadingState('ready'), 300)
       }
     }
 
-    loader.load(
-      '/Yggdrasil_Tree_GoodBake1.glb',
-      () => checkComplete(),
-      (event) => {
-        if (event.lengthComputable) {
-          progressPerModel[0] = Math.min(100, (event.loaded / event.total) * 100)
-          updateProgress()
-        }
-      },
-      (error) => console.error('Error loading leaves model:', error)
-    )
-    loader.load(
-      '/Yggdrasil_Tree_MetallicLook.glb',
-      () => checkComplete(),
-      (event) => {
-        if (event.lengthComputable) {
-          progressPerModel[1] = Math.min(100, (event.loaded / event.total) * 100)
-          updateProgress()
-        }
-      },
-      (error) => console.error('Error loading trunk model:', error)
-    )
-    loader.load(
-      '/Ratatoskr.glb',
-      () => checkComplete(),
-      (event) => {
-        if (event.lengthComputable) {
-          progressPerModel[2] = Math.min(100, (event.loaded / event.total) * 100)
-          updateProgress()
-        }
-      },
-      (error) => console.error('Error loading Ratatoskr model:', error)
-    )
+    loader.load('/Yggdrasil_Tree_GoodBake1.glb', onLoad, undefined, (e) => console.error('Error loading leaves:', e))
+    loader.load('/Yggdrasil_Tree_MetallicLook.glb', onLoad, undefined, (e) => console.error('Error loading trunk:', e))
+    loader.load('/Ratatoskr.glb', onLoad, undefined, (e) => console.error('Error loading Ratatoskr:', e))
   }, [])
 
   if (loadingState === 'loading' || KEEP_LOADING_SCREEN) {
-    return <LoadingScreen />
+    return <LoadingScreen progress={progress} />
   }
 
   return (
