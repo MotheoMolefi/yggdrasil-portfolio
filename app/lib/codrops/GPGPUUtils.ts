@@ -10,6 +10,8 @@ export interface SampledData {
   positions: Float32Array
   uvs: Float32Array
   brightnessScale: Float32Array
+  /** Optional 0–1 per particle for progress-based visibility (e.g. loading bar). Omit for full visibility. */
+  progressCoord?: Float32Array
 }
 
 export default class GPGPUUtils {
@@ -22,6 +24,7 @@ export default class GPGPUUtils {
   uvs!: Float32Array
   velocityTexture!: THREE.DataTexture
   brightnessScale?: Float32Array
+  progressCoord?: Float32Array
   _position: THREE.Vector3
 
   constructor(
@@ -62,6 +65,7 @@ export default class GPGPUUtils {
     this.positions = sampled.positions
     this.uvs = sampled.uvs
     this.brightnessScale = sampled.brightnessScale
+    this.progressCoord = sampled.progressCoord
   }
 
   setupDataFromMesh() {
@@ -132,5 +136,12 @@ export default class GPGPUUtils {
 
   getBrightnessScale(): Float32Array | undefined {
     return this.brightnessScale
+  }
+
+  getProgressCoord(): Float32Array {
+    if (this.progressCoord) return this.progressCoord
+    const a = new Float32Array(this.number)
+    a.fill(1)
+    return a
   }
 }

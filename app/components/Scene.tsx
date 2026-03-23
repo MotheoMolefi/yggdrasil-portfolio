@@ -13,8 +13,8 @@ import ProjectPanel from './ProjectPanel'
 import RatatoskrModel from './RatatoskrModel'
 import RatatoskrChat from './RatatoskrChat'
 import WelcomeScreen from './WelcomeScreen'
-import LoadingParticles from './LoadingParticles'
 import ParticleLoadingBar from './ParticleLoadingBar'
+import LoadingParticles, { PARTICLE_LINES_LOADING } from './LoadingParticles'
 import { projects } from '../data/projects'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
 
@@ -1370,25 +1370,33 @@ const RATATOSKR_NAVIGATE_MAP: Record<string, { id: string; position: [number, nu
 }
 
 // ============================================================================
-// LOADING SCREEN — particle text + 2D Norse loading bar
+// LOADING SCREEN — Norse title + 2D loading bar
 // ============================================================================
 function LoadingScreen({ progress }: { progress: number }) {
   return (
-    <div className="w-full h-full relative bg-[#050510]">
+    <div className="relative h-full w-full bg-[#050510]">
       <Canvas
-        camera={{ position: [0, 0, 5], fov: 60, near: 0.1, far: 15000 }}
+        className="absolute inset-0 block h-full w-full touch-none"
+        camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 15000 }}
         gl={{
           antialias: true,
-          alpha: true,
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1,
+          alpha: false,
+          powerPreference: 'high-performance',
         }}
         frameloop="always"
-        className="w-full h-full"
+        dpr={[1, 2]}
       >
-        <LoadingParticles />
+        <LoadingParticles
+          lines={PARTICLE_LINES_LOADING}
+          transparentBackground={false}
+          lowBloom
+          textScale={1.38}
+          particleSizeScale={0.55}
+        />
       </Canvas>
-      <ParticleLoadingBar progress={progress} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-16">
+        <ParticleLoadingBar progress={progress} />
+      </div>
     </div>
   )
 }
@@ -1586,37 +1594,48 @@ export default function Scene() {
 
   return (
     <div className="w-full h-full relative bg-[#050510]">
-      {/* ========== THREE.JS CANVAS ========== */}
-      <Canvas
-        shadows
-        camera={{ position: [-66, 1347, 3985], fov: 52, near: 0.1, far: 20000 }}
-        gl={{
-          antialias: true,
-          outputColorSpace: THREE.SRGBColorSpace,
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.08,
+      {/* ========== THREE.JS CANVAS (blurred during welcome — overlay + particles stay sharp) ========== */}
+      <div
+        className="absolute inset-0 overflow-hidden"
+        style={{
+          filter: showWelcome ? 'blur(14px) brightness(0.48)' : 'blur(0px) brightness(1)',
+          transform: showWelcome ? 'scale(1.04)' : 'scale(1)',
+          transition: 'filter 0.85s cubic-bezier(0.4, 0, 0.2, 1), transform 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
+          willChange: showWelcome ? 'filter, transform' : 'auto',
         }}
       >
-        <World
-          activeProjectId={activeProjectId}
-          viewingProjectId={viewingProjectId}
-          zoomReached={zoomReached}
-          isLocked={isLocked}
-          zoomTarget={zoomTarget}
-          onActiveChange={handleActiveChange}
-          onInteract={handleInteract}
-          onExit={handleExit}
-          onZoomComplete={handleZoomComplete}
-          themePreset={themePreset}
-          cameraMode={cameraMode}
-          onScrollProgress={handleScrollProgress}
-          onGuidedReady={handleGuidedReady}
-          onCinematicComplete={handleCinematicComplete}
-          chatOpen={showRatatoskr}
-          disableLook={chatHovered}
-          responseCount={ratatoskrResponseCount}
-        />
-      </Canvas>
+        <Canvas
+          className="block h-full w-full touch-none"
+          shadows
+          camera={{ position: [-66, 1347, 3985], fov: 52, near: 0.1, far: 20000 }}
+          gl={{
+            antialias: true,
+            outputColorSpace: THREE.SRGBColorSpace,
+            toneMapping: THREE.ACESFilmicToneMapping,
+            toneMappingExposure: 1.08,
+          }}
+        >
+          <World
+            activeProjectId={activeProjectId}
+            viewingProjectId={viewingProjectId}
+            zoomReached={zoomReached}
+            isLocked={isLocked}
+            zoomTarget={zoomTarget}
+            onActiveChange={handleActiveChange}
+            onInteract={handleInteract}
+            onExit={handleExit}
+            onZoomComplete={handleZoomComplete}
+            themePreset={themePreset}
+            cameraMode={cameraMode}
+            onScrollProgress={handleScrollProgress}
+            onGuidedReady={handleGuidedReady}
+            onCinematicComplete={handleCinematicComplete}
+            chatOpen={showRatatoskr}
+            disableLook={chatHovered}
+            responseCount={ratatoskrResponseCount}
+          />
+        </Canvas>
+      </div>
 
       {/* ========== GUIDED TOUR: SCROLL PROGRESS + HINT ========== */}
       {cameraMode === 'guided' && !zoomReached && (

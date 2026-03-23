@@ -16,16 +16,23 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import GPGPU from '@/app/lib/codrops/GPGPU'
+import { PARTICLE_CURSOR_ACCENT } from '@/app/lib/codrops/particleCursorColor'
 import { getHollowGlyphSet, getLayoutCharInfos } from '@/app/lib/norseFontUtils'
 
 const PARTICLE_GRID_SIZE = 280
 const DISTANCE_IN_FRONT = 800
+const TITLE_SCREEN_OFFSET_Y_PX = -5
+/** Whole letter formation scales together (not per-particle point size) */
+const MESH_BREATH_AMPLITUDE = 0.045
+const MESH_BREATH_FREQ = 1.15
 const GOLD = new THREE.Color(0.808, 0.647, 0.239)
 const WHITE = new THREE.Color(0.95, 0.92, 0.85)
 const COPPER = new THREE.Color(0.72, 0.45, 0.2)
 const CYAN = new THREE.Color(0.4, 0.75, 0.9)
 const PALETTE = { GOLD, WHITE, COPPER, CYAN }
-const PARTICLE_COLOR = PALETTE.CYAN
+/** Shader idles silver ↔ this white */
+const PARTICLE_COLOR = new THREE.Color(1, 1, 1)
+export { PARTICLE_CURSOR_ACCENT }
 const SHOW_HITBOX_DEBUG = false
 
 function makeSphereMesh(): THREE.Mesh {
@@ -35,13 +42,19 @@ function makeSphereMesh(): THREE.Mesh {
   return mesh
 }
 
-function makeTextMesh(font: Font): THREE.Mesh {
-  const charInfos = getLayoutCharInfos(font, LINES, FONT_SIZE, LINE_GAP)
+function makeTextMesh(
+  font: Font,
+  lines: readonly string[],
+  fontSize: number,
+  targetScale: number,
+  lineGap: number
+): THREE.Mesh {
+  const charInfos = getLayoutCharInfos(font, lines, fontSize, lineGap)
   const layoutMin = new THREE.Vector3(Infinity, Infinity, Infinity)
   const layoutMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity)
   const geos: THREE.BufferGeometry[] = []
   for (const { char, x, y } of charInfos) {
-    const charGeo = buildCharGeometry(font, char, FONT_SIZE)
+    const charGeo = buildCharGeometry(font, char, fontSize)
     if (!charGeo) continue
     charGeo.translate(x, y, 0)
     charGeo.computeBoundingBox()
@@ -58,7 +71,7 @@ function makeTextMesh(font: Font): THREE.Mesh {
   center.addVectors(layoutMin, layoutMax).multiplyScalar(0.5)
   const size = new THREE.Vector3().subVectors(layoutMax, layoutMin)
   const maxDim = Math.max(size.x, size.y, size.z)
-  const scale = maxDim > 0 ? TARGET_SCALE / maxDim : 1
+  const scale = maxDim > 0 ? targetScale / maxDim : 1
   const geo = mergeBufferGeometries(geos)
   geos.forEach((g) => g.dispose())
   const pos = geo.attributes.position
@@ -70,7 +83,7 @@ function makeTextMesh(font: Font): THREE.Mesh {
   pos.needsUpdate = true
   geo.computeBoundingSphere()
   geo.computeBoundingBox()
-  const hitboxPadding = 280
+  const hitboxPadding = Math.round(280 * (targetScale / 1000))
   geo.boundingBox!.expandByScalar(hitboxPadding)
   if (geo.boundingSphere) geo.boundingSphere.radius += hitboxPadding
   const mesh = new THREE.Mesh(
@@ -84,10 +97,14 @@ function makeTextMesh(font: Font): THREE.Mesh {
   return mesh
 }
 
-const LINES: [string, string] = ['Motheo Molefi Presents:', 'Yggdrasil']
-const FONT_SIZE = 44
-const LINE_GAP = 4
-const TARGET_SCALE = 1000
+/** Particle copy for loading screen (same GPGPU text as before, moved off welcome) */
+export const PARTICLE_LINES_LOADING = ['Motheo Molefi Presents:'] as const
+/** Welcome title only — “Presents” line shows while GLBs load */
+export const PARTICLE_LINES_WELCOME = ['Yggdrasil'] as const
+
+const DEFAULT_FONT_SIZE = 44
+const LINE_GAP_BASE = 4
+const DEFAULT_TARGET_SCALE = 1000
 const HOLLOW_BRIGHTNESS = 1.18
 const MS_BRIGHTNESS = 1.1
 
@@ -121,9 +138,13 @@ function buildCharGeometry(font: Font, char: string, fontSize: number): THREE.Bu
 function makeSampledData(
   font: Font,
   hollowSet: Set<string>,
-  totalSamples: number
+  totalSamples: number,
+  lines: readonly string[],
+  fontSize: number,
+  targetScale: number,
+  lineGap: number
 ): { positions: Float32Array; uvs: Float32Array; brightnessScale: Float32Array } {
-  const charInfos = getLayoutCharInfos(font, LINES, FONT_SIZE, LINE_GAP)
+  const charInfos = getLayoutCharInfos(font, lines, fontSize, lineGap)
   const numChars = charInfos.length
   if (numChars === 0) {
     const positions = new Float32Array(3 * totalSamples)
@@ -139,7 +160,7 @@ function makeSampledData(
 
   for (let c = 0; c < numChars; c++) {
     const { char, x, y } = charInfos[c]
-    const geo = buildCharGeometry(font, char, FONT_SIZE)
+    const geo = buildCharGeometry(font, char, fontSize)
     charGeos.push(geo)
     if (geo) {
       geo.computeBoundingBox()
@@ -157,7 +178,7 @@ function makeSampledData(
   center.addVectors(layoutMin, layoutMax).multiplyScalar(0.5)
   const size = new THREE.Vector3().subVectors(layoutMax, layoutMin)
   const maxDim = Math.max(size.x, size.y, size.z)
-  const scale = maxDim > 0 ? TARGET_SCALE / maxDim : 1
+  const scale = maxDim > 0 ? targetScale / maxDim : 1
   const pos = new THREE.Vector3()
   const dummyMaterial = new THREE.MeshBasicMaterial({ visible: false })
 
@@ -243,12 +264,35 @@ function makeSampledData(
   return { positions, uvs, brightnessScale }
 }
 
-export default function LoadingParticles() {
+export default function LoadingParticles({
+  transparentBackground = false,
+  lines,
+  lowBloom = false,
+  textScale = 1,
+  particleSizeScale = 1,
+  titleOffsetYPx = 0,
+  cursorRepelHex,
+}: {
+  transparentBackground?: boolean
+  /** One or two lines of Norse particle text */
+  lines: readonly string[]
+  /** Softer UnrealBloomPass (e.g. loading “Presents” screen) */
+  lowBloom?: boolean
+  /** Scales layout, world size, and base point size together (e.g. 1.35 on loading) */
+  textScale?: number
+  /** Multiplies point sprite size only (finer / chunkier dots without changing letter layout) */
+  particleSizeScale?: number
+  /** Extra vertical offset in screen px (negative = up); pairs with DOM subtitle under welcome title */
+  titleOffsetYPx?: number
+  /** Cursor repel tint as `#RRGGBB`; omit for default loading colour (#63E5FF) */
+  cursorRepelHex?: string
+}) {
   const { gl, scene, camera, invalidate } = useThree()
   const groupRef = useRef<THREE.Group | null>(null)
   const gpgpuRef = useRef<GPGPU | null>(null)
   const meshRef = useRef<THREE.Mesh | null>(null)
   const composerRef = useRef<EffectComposer | null>(null)
+  const bloomPassRef = useRef<UnrealBloomPass | null>(null)
   const raycasterRef = useRef(new THREE.Raycaster())
   const mouseNDCRef = useRef(new THREE.Vector2(0, 0))
   const lastNDCRef = useRef(new THREE.Vector2(0, 0))
@@ -259,10 +303,23 @@ export default function LoadingParticles() {
   const hollowGlyphSetRef = useRef<Set<string> | null>(null)
   const worldBoxRef = useRef(new THREE.Box3())
   const boxHitRef = useRef(new THREE.Vector3())
+  const lowBloomRef = useRef(lowBloom)
+  lowBloomRef.current = lowBloom
+  const titleOffsetYPxRef = useRef(titleOffsetYPx)
+  titleOffsetYPxRef.current = titleOffsetYPx
 
   useEffect(() => {
     cancelledRef.current = false
-    gl.setClearColor(0x050510, 1)
+    const fontSize = Math.round(DEFAULT_FONT_SIZE * textScale)
+    const targetScale = DEFAULT_TARGET_SCALE * textScale
+    const lineGap = Math.max(2, Math.round(LINE_GAP_BASE * textScale))
+    const particlePointSize = Math.round(2200 * textScale * particleSizeScale)
+
+    if (transparentBackground) {
+      gl.setClearColor(0x000000, 0)
+    } else {
+      gl.setClearColor(0x050510, 1)
+    }
     gl.toneMapping = THREE.ACESFilmicToneMapping
     gl.toneMappingExposure = 1.2
     gl.outputColorSpace = THREE.SRGBColorSpace
@@ -272,11 +329,16 @@ export default function LoadingParticles() {
       height: gl.domElement.clientHeight || window.innerHeight,
     }
     const mouse = { cursorPosition: new THREE.Vector3() }
+    const repelColor =
+      cursorRepelHex != null && cursorRepelHex !== ''
+        ? new THREE.Color(cursorRepelHex)
+        : PARTICLE_CURSOR_ACCENT
     const params = {
       color: PARTICLE_COLOR.clone(),
-      size: 1000,
-      minAlpha: 0.52,
-      maxAlpha: 0.82,
+      cursorColor: repelColor.clone(),
+      size: particlePointSize,
+      minAlpha: 0.88,
+      maxAlpha: 1.0,
       force: 0.90,
     }
 
@@ -331,24 +393,29 @@ export default function LoadingParticles() {
       ;(gpgpu.uniforms.velocityUniforms.uMouse as { value: THREE.Vector3 }).value.set(1e6, 1e6, 1e6)
       ;(gpgpu.uniforms.velocityUniforms.uMouseActive as { value: number }).value = 0
 
-      const composer = new EffectComposer(gl)
-      composer.addPass(new RenderPass(scene, camera))
-      composer.addPass(
-        new UnrealBloomPass(
+      if (transparentBackground) {
+        composerRef.current = null
+        bloomPassRef.current = null
+      } else {
+        const composer = new EffectComposer(gl)
+        composer.addPass(new RenderPass(scene, camera))
+        const bloomPass = new UnrealBloomPass(
           new THREE.Vector2(sizes.width, sizes.height),
-          1.8,
-          0.5,
-          0.02
+          lowBloom ? 0.16 : 0.95,
+          lowBloom ? 0.12 : 0.38,
+          lowBloom ? 0.72 : 0.5
         )
-      )
-      composerRef.current = composer
+        composer.addPass(bloomPass)
+        bloomPassRef.current = bloomPass
+        composerRef.current = composer
+      }
 
       const onResize = () => {
         const w = gl.domElement.clientWidth || window.innerWidth
         const h = gl.domElement.clientHeight || window.innerHeight
         gpgpu.material.uniforms.uResolution.value.set(w, h)
-        composer.setSize(w, h)
-        composer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        composerRef.current?.setSize(w, h)
+        composerRef.current?.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       }
       const canvas = gl.domElement
       const onMouseMove = (e: MouseEvent) => {
@@ -380,8 +447,9 @@ export default function LoadingParticles() {
         gpgpu.material.dispose()
         gpgpu.utils.getPositionTexture().dispose()
         gpgpu.utils.getVelocityTexture().dispose()
-        composer.dispose()
+        composerRef.current?.dispose()
         composerRef.current = null
+        bloomPassRef.current = null
         groupRef.current = null
         gpgpuRef.current = null
         meshRef.current = null
@@ -397,11 +465,15 @@ export default function LoadingParticles() {
         if (process.env.NODE_ENV === 'development') {
           console.log('[LoadingParticles] Hollow glyphs (by outline):', Array.from(hollowGlyphSetRef.current).sort().join(''))
         }
-        const mesh = makeTextMesh(font)
+        const mesh = makeTextMesh(font, lines, fontSize, targetScale, lineGap)
         const sampledData = makeSampledData(
           font,
           hollowGlyphSetRef.current,
-          PARTICLE_GRID_SIZE * PARTICLE_GRID_SIZE
+          PARTICLE_GRID_SIZE * PARTICLE_GRID_SIZE,
+          lines,
+          fontSize,
+          targetScale,
+          lineGap
         )
         createMeshAndInit(mesh, sampledData)
       },
@@ -415,7 +487,18 @@ export default function LoadingParticles() {
       cancelledRef.current = true
       cleanupRef.current?.()
     }
-  }, [gl, scene, camera, invalidate])
+  }, [
+    gl,
+    scene,
+    camera,
+    invalidate,
+    transparentBackground,
+    lowBloom,
+    textScale,
+    particleSizeScale,
+    lines.join('\0'),
+    cursorRepelHex,
+  ])
 
   // Priority 1: take over rendering so R3F does not run gl.render() after this and overwrite our composer output
   useFrame(() => {
@@ -423,12 +506,26 @@ export default function LoadingParticles() {
     const group = groupRef.current
     const mesh = meshRef.current
     const composer = composerRef.current
-    if (!gpgpu || !group || !mesh || !composer) return
+    if (!gpgpu || !group || !mesh) return
+
+    const t = performance.now() * 0.001
 
     const dir = new THREE.Vector3()
+    const camUp = new THREE.Vector3()
     camera.getWorldDirection(dir)
     group.position.copy(camera.position).add(dir.multiplyScalar(DISTANCE_IN_FRONT))
-    // group.rotation.y += 0.004
+    const fov = 'fov' in camera ? (camera as THREE.PerspectiveCamera).fov : 60
+    const viewportHeight = gl.domElement.clientHeight || window.innerHeight || 1
+    const worldUnitsPerPixel =
+      (2 * Math.tan(THREE.MathUtils.degToRad(fov * 0.5)) * DISTANCE_IN_FRONT) / viewportHeight
+    camUp.set(0, 1, 0).applyQuaternion(camera.quaternion)
+    group.position.addScaledVector(
+      camUp,
+      (TITLE_SCREEN_OFFSET_Y_PX + titleOffsetYPxRef.current) * worldUnitsPerPixel
+    )
+    group.quaternion.copy(camera.quaternion)
+    const breath = 1.0 + MESH_BREATH_AMPLITUDE * Math.sin(t * MESH_BREATH_FREQ)
+    group.scale.setScalar(breath)
     group.updateMatrixWorld(true)
 
     raycasterRef.current.setFromCamera(mouseNDCRef.current, camera)
@@ -471,7 +568,19 @@ export default function LoadingParticles() {
     }
 
     const uTime = gpgpu.uniforms.velocityUniforms.uTime as { value: number }
-    if (uTime) uTime.value = performance.now() * 0.001
+    if (uTime) uTime.value = t
+    gpgpu.material.uniforms.uIdleTime.value = t
+
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.8)
+    if (bloomPassRef.current) {
+      if (lowBloomRef.current) {
+        bloomPassRef.current.strength = 0.12 + pulse * 0.08
+        bloomPassRef.current.radius = 0.08 + pulse * 0.04
+      } else {
+        bloomPassRef.current.strength = 0.82 + pulse * 0.36
+        bloomPassRef.current.radius = 0.32 + pulse * 0.14
+      }
+    }
 
     gpgpu.compute()
     gpgpu.material.uniforms.uPositionTexture.value =
@@ -479,7 +588,12 @@ export default function LoadingParticles() {
     gpgpu.material.uniforms.uVelocityTexture.value =
       gpgpu.gpgpuCompute.getCurrentRenderTarget(gpgpu.velocityVariable).texture
 
-    composer.render()
+    if (composer) {
+      composer.render()
+    } else {
+      gl.clearDepth()
+      gl.render(scene, camera)
+    }
     invalidate()
   }, 1)
 

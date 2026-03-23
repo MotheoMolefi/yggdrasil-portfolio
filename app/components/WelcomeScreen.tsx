@@ -1,31 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { WELCOME_PARTICLE_CURSOR_ACCENT_HEX } from '@/app/lib/codrops/particleCursorColor'
+import LoadingParticles, { PARTICLE_LINES_WELCOME } from './LoadingParticles'
 
 interface WelcomeScreenProps {
   onEnter: () => void
-}
-
-// Wait for Norse font to actually load so we never show "Yggdrasil" in fallback (avoids FOUC)
-function useNorseReady() {
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    let cancelled = false
-    // Explicitly load the font so the promise resolves when Norse is ready (document.fonts.ready can resolve too early)
-    document.fonts.load('bold 1em Norse').then(() => {
-      if (!cancelled) setReady(true)
-    }).catch(() => {
-      if (!cancelled) setReady(true)
-    })
-    const t = setTimeout(() => {
-      if (!cancelled) setReady(true)
-    }, 1200)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [])
-  return ready
 }
 
 const CONTROLS = [
@@ -51,12 +32,28 @@ function usePaintReady() {
   return ready
 }
 
+// Defer Canvas mount until container is in DOM so R3F connect() doesn't see null
+function useCanvasReady(visible: boolean) {
+  const [canvasReady, setCanvasReady] = useState(false)
+  useEffect(() => {
+    if (!visible) {
+      setCanvasReady(false)
+      return
+    }
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setCanvasReady(true))
+    })
+    return () => cancelAnimationFrame(id)
+  }, [visible])
+  return canvasReady
+}
+
 export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
   const [phase, setPhase]     = useState<'intro' | 'controls'>('intro')
   const [exiting, setExiting] = useState(false)
   const [visible, setVisible] = useState(true)
   const paintReady = usePaintReady()
-  const norseReady = useNorseReady()
+  const canvasReady = useCanvasReady(visible)
 
   // Stable refs so event handlers always see latest values
   const phaseRef   = useRef(phase)
@@ -97,14 +94,44 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
       className="fixed inset-0 z-50 overflow-hidden"
       style={{ opacity: exiting ? 0 : 1, transition: 'opacity 0.8s ease' }}
     >
-      {/* Atmospheric dark gradient over the 3D canvas behind */}
+      {/* Dark blue transparent overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(3,4,18,0.45) 0%, rgba(3,4,18,0.82) 100%)',
+            'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(18,36,84,0.28) 0%, rgba(10,24,64,0.56) 40%, rgba(4,10,32,0.84) 100%)',
         }}
       />
+
+      {/* Particles on top of overlay — mount Canvas after container is in DOM to avoid R3F addEventListener(null) */}
+      <div
+        className="absolute inset-0 z-[1] pointer-events-none"
+        aria-hidden
+      >
+        {canvasReady && (
+          <Canvas
+            camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 10000 }}
+            gl={{
+              alpha: true,
+              antialias: true,
+              powerPreference: 'high-performance',
+              stencil: false,
+              depth: false,
+            }}
+            frameloop="always"
+            dpr={[1, 2]}
+            style={{ display: 'block', width: '100%', height: '100%' }}
+          >
+            <LoadingParticles
+              transparentBackground
+              lines={PARTICLE_LINES_WELCOME}
+              textScale={0.50}
+              titleOffsetYPx={0}
+              cursorRepelHex={WELCOME_PARTICLE_CURSOR_ACCENT_HEX}
+            />
+          </Canvas>
+        )}
+      </div>
 
       {/* ── Phase 1: Intro ─────────────────────────────────────────────────── */}
       <div
@@ -115,37 +142,26 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
           transition: 'opacity 0.5s ease, transform 0.5s ease',
         }}
       >
-        <p
-          className="text-[11px] uppercase"
-          style={{ color: 'rgba(160,200,255,0.65)', letterSpacing: '0.38em' }}
-        >
-          Motheo Molefi
-        </p>
-
-        <h1
-          className="mt-3 font-bold"
+        {/* Same horizontal center as particle title (viewport center); offset down so stack reads as one unit */}
+        <div
+          className="flex w-full max-w-[min(92vw,28rem)] flex-col items-center justify-center px-4"
           style={{
-            fontFamily: "'Norse', system-ui, sans-serif",
-            fontWeight: 'bold',
-            fontSize: 'clamp(3.5rem, 8vw, 5.5rem)',
-            color: '#ffffff',
-            letterSpacing: '0.07em',
-            textShadow: '0 0 60px rgba(120,180,255,0.35), 0 2px 6px rgba(0,0,0,0.7)',
-            opacity: norseReady ? 1 : 0,
-            transition: 'opacity 0.35s ease',
+            transform: 'translateY(clamp(4.5rem, 13vh, 7rem))',
           }}
-          aria-hidden={!norseReady}
         >
-          Yggdrasil
-        </h1>
-
-        <p
-          className="mt-4 text-sm"
-          style={{ color: 'rgba(190,215,255,0.45)', letterSpacing: '0.09em' }}
-        >
-          An interactive 3D portfolio
-        </p>
-
+          <p
+            className="m-0 w-full text-center"
+            style={{
+              fontFamily: "'Norse', system-ui, sans-serif",
+              fontWeight: 'bold',
+              fontSize: 'clamp(1.2rem, 3.65vw, 1.65rem)',
+              color: 'rgba(248, 252, 255, 0.9)',
+              letterSpacing: '0.12em',
+            }}
+          >
+            A 3D interactive portfolio site
+          </p>
+        </div>
         {/* Click-to-continue cue */}
         <div
           className="absolute bottom-10 flex flex-col items-center gap-2"

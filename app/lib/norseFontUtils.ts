@@ -41,15 +41,19 @@ export interface CharLayoutInfo {
 /**
  * Compute (x, y) layout position for each character in the given lines,
  * matching Three.js Font layout: line 1 at y=0, line 2 centered under line 1, with lineGap.
+ * Supports one or two non-empty lines.
  */
 export function getLayoutCharInfos(
   font: Font,
-  lines: [string, string],
+  lines: readonly string[],
   fontSize: number,
   lineGap: number
 ): CharLayoutInfo[] {
   const data = (font as unknown as { data?: FontData }).data
   if (!data?.glyphs) return []
+
+  const filtered = lines.filter((l) => l.length > 0)
+  if (filtered.length === 0) return []
 
   const scale = fontSize / data.resolution
   const lineHeight =
@@ -67,14 +71,14 @@ export function getLayoutCharInfos(
     return w
   }
 
-  const w1 = lineWidth(lines[0])
-  const w2 = lineWidth(lines[1])
+  const w1 = lineWidth(filtered[0])
   const refCenterX = w1 / 2
-  const startX2 = refCenterX - w2 / 2
+  const w2 = filtered[1] ? lineWidth(filtered[1]) : 0
+  const startX2 = filtered[1] ? refCenterX - w2 / 2 : 0
 
   const out: CharLayoutInfo[] = []
   let y = 0
-  ;[lines[0], lines[1]].forEach((line, lineIndex) => {
+  filtered.forEach((line, lineIndex) => {
     let x = lineIndex === 0 ? 0 : startX2
     for (const char of line) {
       out.push({ char, x, y })

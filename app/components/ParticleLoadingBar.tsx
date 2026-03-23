@@ -12,7 +12,7 @@ export default function ParticleLoadingBar({ progress }: { progress: number }) {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+      className="pointer-events-none flex w-full flex-col items-center gap-3"
       aria-hidden
     >
       <div

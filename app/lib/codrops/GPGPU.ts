@@ -6,10 +6,13 @@
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js'
 import GPGPUUtils, { type SampledData } from './GPGPUUtils'
+import { PARTICLE_CURSOR_ACCENT } from './particleCursorColor'
 import { simFragment, simFragmentVelocity, vertexShader, fragmentShader } from './shaders'
 
 export interface GPGPUParams {
   color: THREE.Color
+  /** Particle colour when cursor repels (defaults to `PARTICLE_CURSOR_ACCENT` / #63E5FF) */
+  cursorColor?: THREE.Color
   size: number
   minAlpha: number
   maxAlpha: number
@@ -136,8 +139,13 @@ export default class GPGPU {
         uResolution: { value: new THREE.Vector2(this.sizes.width, this.sizes.height) },
         uParticleSize: { value: this.params.size },
         uColor: { value: this.params.color },
+        uCursorColor: {
+          value: this.params.cursorColor?.clone() ?? PARTICLE_CURSOR_ACCENT.clone(),
+        },
         uMinAlpha: { value: this.params.minAlpha },
         uMaxAlpha: { value: this.params.maxAlpha },
+        uProgress: { value: 1 },
+        uIdleTime: { value: 0 },
       },
       vertexShader,
       fragmentShader,
@@ -160,6 +168,11 @@ export default class GPGPU {
         new THREE.BufferAttribute(brightnessScale, 1)
       )
     }
+    const progressCoord = this.utils.getProgressCoord()
+    geometry.setAttribute(
+      'progressCoord',
+      new THREE.BufferAttribute(progressCoord, 1)
+    )
 
     this.mesh = new THREE.Points(geometry, this.material)
     this.scene.add(this.mesh)

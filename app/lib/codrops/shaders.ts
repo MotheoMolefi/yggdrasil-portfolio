@@ -78,8 +78,10 @@ export const vertexShader = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vPosition;
 varying float vBrightness;
+varying float vProgressCoord;
 
 attribute float brightnessScale;
+attribute float progressCoord;
 
 uniform float uParticleSize;
 uniform sampler2D uPositionTexture;
@@ -88,6 +90,7 @@ uniform sampler2D uPositionTexture;
 void main() {
   vUv = uv;
   vBrightness = brightnessScale > 0.0 ? brightnessScale : 1.0;
+  vProgressCoord = progressCoord;
 
   vec3 newpos = position;
 
@@ -100,7 +103,8 @@ void main() {
 
   vec4 mvPosition = modelViewMatrix * vec4( newpos, 1.0 );
 
-  gl_PointSize = ( uParticleSize / -mvPosition.z );
+  /* Uniform point size — whole title scales on the CPU via group.scale */
+  gl_PointSize = max(1.0, uParticleSize / -mvPosition.z);
 
   gl_Position = projectionMatrix * mvPosition;
 }
@@ -109,21 +113,38 @@ void main() {
 export const fragmentShader = /* glsl */ `
 varying vec2 vUv;
 varying float vBrightness;
+varying float vProgressCoord;
 
 uniform sampler2D uVelocityTexture;
 uniform vec3 uColor;
+uniform vec3 uCursorColor;
 uniform float uMinAlpha;
 uniform float uMaxAlpha;
+uniform float uProgress;
+uniform float uIdleTime;
 
 
 void main() {
+  if (vProgressCoord > uProgress) { discard; }
   float center = length(gl_PointCoord - 0.5);
 
   vec3 velocity = texture2D( uVelocityTexture, vUv ).xyz * 100.0;
   float speed = length(velocity);
   float repelled = min(1.0, speed * 0.4);
   float velocityAlpha = mix(uMinAlpha, uMaxAlpha, repelled) * vBrightness;
-  vec3 finalColor = mix(uColor, uColor * 1.85, repelled) * vBrightness;
+  /* Idle: pulse light silver → uColor (white). Cursor repel: vivid uCursorColor */
+  float interact = smoothstep(0.012, 0.09, repelled);
+  vec3 silverLow = vec3(0.72, 0.74, 0.78);
+  float metalPulse = 0.5 + 0.5 * sin(uIdleTime * 1.05);
+  vec3 idleBase = mix(silverLow, uColor, metalPulse);
+  float punch = mix(1.0, 1.14, interact);
+  vec3 accent = uCursorColor * (1.0 + 0.22 * interact);
+  vec3 baseColor = mix(idleBase, accent, interact) * vBrightness * punch;
+  vec3 finalColor = baseColor;
+
+  /* Subtle alpha shimmer so idle isn’t only a colour cross-fade */
+  float w2 = sin(uIdleTime * 0.85 + 1.1);
+  velocityAlpha *= (0.94 + 0.06 * (0.5 + 0.5 * w2));
 
   if (center > 0.5) { discard; }
 
