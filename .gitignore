@@ -39,15 +39,10 @@ art/*.blend
 art/*.blend1
 *.blend1
 
-# 3D model licensed assets (to avoid accidental redistribution)
+# Optional local asset packs / sources (not deployed)
 Galaxy_blue/
-Yggdrasil_Tree.glb
-Yggdrasil_Tree_GoodBake1.glb
-Yggdrasil_Tree_MetallicLook.glb
-
-# Ratatoskr — licensed asset, not for redistribution
-Ratatoskr.glb
-public/Ratatoskr.glb
 Squirrel_A3.blend
+
+# GLBs under public/ are versioned for Vercel; keep .blend sources out of git
 *.blend
 .vercel
