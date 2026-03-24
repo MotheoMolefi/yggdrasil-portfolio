@@ -16,7 +16,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import GPGPU from '@/app/lib/codrops/GPGPU'
-import { PARTICLE_CURSOR_ACCENT } from '@/app/lib/codrops/particleCursorColor'
+import { PARTICLE_CURSOR_ACCENT } from '../lib/codrops/particleCursorColor'
 import { getHollowGlyphSet, getLayoutCharInfos } from '@/app/lib/norseFontUtils'
 
 const PARTICLE_GRID_SIZE = 280

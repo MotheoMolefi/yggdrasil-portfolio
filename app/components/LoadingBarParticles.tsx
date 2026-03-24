@@ -5,7 +5,7 @@ import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js'
 import GPGPU from '@/app/lib/codrops/GPGPU'
-import { PARTICLE_CURSOR_ACCENT } from '@/app/lib/codrops/particleCursorColor'
+import { PARTICLE_CURSOR_ACCENT } from '../lib/codrops/particleCursorColor'
 
 const BAR_GRID_SIZE = 48
 const DISTANCE_IN_FRONT = 800

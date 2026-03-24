@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { WELCOME_PARTICLE_CURSOR_ACCENT_HEX } from '@/app/lib/codrops/particleCursorColor'
+import { WELCOME_PARTICLE_CURSOR_ACCENT_HEX } from '../lib/codrops/particleCursorColor'
 import LoadingParticles, { PARTICLE_LINES_WELCOME } from './LoadingParticles'
 
 interface WelcomeScreenProps {
@@ -53,7 +53,8 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
   const [exiting, setExiting] = useState(false)
   const [visible, setVisible] = useState(true)
   const paintReady = usePaintReady()
-  const canvasReady = useCanvasReady(visible)
+  const showIntroParticles = visible && phase === 'intro'
+  const canvasReady = useCanvasReady(showIntroParticles)
 
   // Stable refs so event handlers always see latest values
   const phaseRef   = useRef(phase)
@@ -103,12 +104,9 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
         }}
       />
 
-      {/* Particles on top of overlay — mount Canvas after container is in DOM to avoid R3F addEventListener(null) */}
-      <div
-        className="absolute inset-0 z-[1] pointer-events-none"
-        aria-hidden
-      >
-        {canvasReady && (
+      {/* Particles only on intro — omit entire layer on controls (z-[1] was painting above z-auto UI) */}
+      {showIntroParticles && canvasReady && (
+        <div className="absolute inset-0 z-[1] pointer-events-none" aria-hidden>
           <Canvas
             camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 10000 }}
             gl={{
@@ -130,12 +128,12 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
               cursorRepelHex={WELCOME_PARTICLE_CURSOR_ACCENT_HEX}
             />
           </Canvas>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Phase 1: Intro ─────────────────────────────────────────────────── */}
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none"
+        className="absolute inset-0 z-[2] flex flex-col items-center justify-center pointer-events-none select-none"
         style={{
           opacity:   phase === 'intro' && paintReady ? 1 : 0,
           transform: phase === 'intro' ? 'translateY(0px)' : 'translateY(-24px)',
@@ -179,12 +177,12 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
 
       {/* Invisible click-catcher for phase 1 */}
       {phase === 'intro' && (
-        <div className="absolute inset-0 cursor-pointer" onClick={goToControls} />
+        <div className="absolute inset-0 z-[3] cursor-pointer" onClick={goToControls} />
       )}
 
       {/* ── Phase 2: Controls ──────────────────────────────────────────────── */}
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center"
+        className="absolute inset-0 z-[2] flex flex-col items-center justify-center"
         style={{
           opacity:   phase === 'controls' ? 1 : 0,
           transform: phase === 'controls' ? 'translateY(0px)' : 'translateY(24px)',

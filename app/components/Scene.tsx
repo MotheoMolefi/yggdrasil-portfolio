@@ -432,10 +432,15 @@ function CinematicCamera({
 // GUIDED CAMERA CONTROLLER
 // Continuous-scroll tour: wheel drives smooth interpolation between waypoints
 // ============================================================================
+/** First cinematic/guided waypoint — keep in sync with main `<Canvas camera>` position. */
+const OVERVIEW_CAMERA_POSITION: [number, number, number] = [0, 1347, 3985]
+/** Look target toward tree mass (symmetric framing; was offset at -100 X). */
+const OVERVIEW_CAMERA_LOOK_AT = new THREE.Vector3(0, 1500, 0)
+
 const GUIDED_WAYPOINTS = (() => {
   const overview = {
-    position: new THREE.Vector3(0, 1347, 3985),
-    lookAt: new THREE.Vector3(-100, 1800, 0),
+    position: new THREE.Vector3(...OVERVIEW_CAMERA_POSITION),
+    lookAt: OVERVIEW_CAMERA_LOOK_AT.clone(),
     projectId: null as string | null,
   }
 
@@ -1568,24 +1573,52 @@ export default function Scene() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [isLocked])
 
-  // Pre-load all GLB models — bar only moves when each model has fully loaded (onLoad), not from download %
+  // Pre-load: gate on tree models only (largest scene requirement). Ratatoskr + cloud warm in parallel
+  // so the bar finishes sooner; drei's useGLTF still benefits from LoadingManager cache.
   useEffect(() => {
     const loader = new GLTFLoader()
-    let loadedCount = 0
-    const totalModels = 3
+    const criticalUrls = [
+      '/Yggdrasil_Tree_GoodBake1.glb',
+      '/Yggdrasil_Tree_MetallicLook.glb',
+    ] as const
+    let criticalLoaded = 0
 
-    const onLoad = () => {
-      loadedCount++
-      setProgress(Math.min(99, (loadedCount / totalModels) * 100))
-      if (loadedCount === totalModels) {
+    const onCriticalLoaded = () => {
+      criticalLoaded++
+      setProgress(Math.min(99, (criticalLoaded / criticalUrls.length) * 100))
+      if (criticalLoaded === criticalUrls.length) {
         setProgress(100)
-        setTimeout(() => setLoadingState('ready'), 300)
+        setTimeout(() => setLoadingState('ready'), 200)
       }
     }
 
-    loader.load('/Yggdrasil_Tree_GoodBake1.glb', onLoad, undefined, (e) => console.error('Error loading leaves:', e))
-    loader.load('/Yggdrasil_Tree_MetallicLook.glb', onLoad, undefined, (e) => console.error('Error loading trunk:', e))
-    loader.load('/Ratatoskr.glb', onLoad, undefined, (e) => console.error('Error loading Ratatoskr:', e))
+    const loadCritical = (url: string, label: string) => {
+      loader.load(
+        url,
+        onCriticalLoaded,
+        undefined,
+        (e) => {
+          console.error(label, e)
+          onCriticalLoaded()
+        }
+      )
+    }
+
+    loadCritical(criticalUrls[0], 'Error loading leaves:')
+    loadCritical(criticalUrls[1], 'Error loading trunk:')
+
+    loader.load(
+      '/Ratatoskr.glb',
+      () => {},
+      undefined,
+      (e) => console.error('Error loading Ratatoskr:', e)
+    )
+    loader.load(
+      '/cloud_box_pro.glb',
+      () => {},
+      undefined,
+      (e) => console.error('Error loading cloud_box_pro:', e)
+    )
   }, [])
 
   if (loadingState === 'loading' || KEEP_LOADING_SCREEN) {
@@ -1607,7 +1640,7 @@ export default function Scene() {
         <Canvas
           className="block h-full w-full touch-none"
           shadows
-          camera={{ position: [-66, 1347, 3985], fov: 52, near: 0.1, far: 20000 }}
+          camera={{ position: OVERVIEW_CAMERA_POSITION, fov: 52, near: 0.1, far: 20000 }}
           gl={{
             antialias: true,
             outputColorSpace: THREE.SRGBColorSpace,
