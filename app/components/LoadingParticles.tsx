@@ -264,6 +264,9 @@ function makeSampledData(
   return { positions, uvs, brightnessScale }
 }
 
+/** `lightGold`: gold idle pulse + blue repel; use `clearColorHex` with drei `Environment` instead of white fill. */
+export type LoadingParticlesAppearance = 'dark' | 'lightGold'
+
 export default function LoadingParticles({
   transparentBackground = false,
   lines,
@@ -272,6 +275,9 @@ export default function LoadingParticles({
   particleSizeScale = 1,
   titleOffsetYPx = 0,
   cursorRepelHex,
+  appearance = 'dark',
+  /** When set, used as WebGL clear (e.g. dark base under drei `Environment` background). */
+  clearColorHex,
 }: {
   transparentBackground?: boolean
   /** One or two lines of Norse particle text */
@@ -286,6 +292,8 @@ export default function LoadingParticles({
   titleOffsetYPx?: number
   /** Cursor repel tint as `#RRGGBB`; omit for default loading colour (#63E5FF) */
   cursorRepelHex?: string
+  appearance?: LoadingParticlesAppearance
+  clearColorHex?: number
 }) {
   const { gl, scene, camera, invalidate } = useThree()
   const groupRef = useRef<THREE.Group | null>(null)
@@ -305,6 +313,8 @@ export default function LoadingParticles({
   const boxHitRef = useRef(new THREE.Vector3())
   const lowBloomRef = useRef(lowBloom)
   lowBloomRef.current = lowBloom
+  const appearanceRef = useRef(appearance)
+  appearanceRef.current = appearance
   const titleOffsetYPxRef = useRef(titleOffsetYPx)
   titleOffsetYPxRef.current = titleOffsetYPx
 
@@ -317,11 +327,15 @@ export default function LoadingParticles({
 
     if (transparentBackground) {
       gl.setClearColor(0x000000, 0)
+    } else if (clearColorHex != null) {
+      gl.setClearColor(clearColorHex, 1)
+    } else if (appearance === 'lightGold') {
+      gl.setClearColor(0xf5f4f2, 1)
     } else {
       gl.setClearColor(0x050510, 1)
     }
     gl.toneMapping = THREE.ACESFilmicToneMapping
-    gl.toneMappingExposure = 1.2
+    gl.toneMappingExposure = appearance === 'lightGold' ? 1.14 : 1.2
     gl.outputColorSpace = THREE.SRGBColorSpace
 
     const sizes = {
@@ -333,11 +347,14 @@ export default function LoadingParticles({
       cursorRepelHex != null && cursorRepelHex !== ''
         ? new THREE.Color(cursorRepelHex)
         : PARTICLE_CURSOR_ACCENT
+    const goldIdle = new THREE.Color('#f2d56a')
+    const goldIdleLow = new THREE.Color('#a6842e')
     const params = {
-      color: PARTICLE_COLOR.clone(),
+      color: appearance === 'lightGold' ? goldIdle.clone() : PARTICLE_COLOR.clone(),
+      idleLowColor: appearance === 'lightGold' ? goldIdleLow.clone() : undefined,
       cursorColor: repelColor.clone(),
       size: particlePointSize,
-      minAlpha: 0.88,
+      minAlpha: appearance === 'lightGold' ? 0.92 : 0.88,
       maxAlpha: 1.0,
       force: 0.90,
     }
@@ -399,12 +416,24 @@ export default function LoadingParticles({
       } else {
         const composer = new EffectComposer(gl)
         composer.addPass(new RenderPass(scene, camera))
-        const bloomPass = new UnrealBloomPass(
-          new THREE.Vector2(sizes.width, sizes.height),
-          lowBloom ? 0.16 : 0.95,
-          lowBloom ? 0.12 : 0.38,
-          lowBloom ? 0.72 : 0.5
-        )
+        const bloomDims = new THREE.Vector2(sizes.width, sizes.height)
+        let bStrength: number
+        let bRadius: number
+        let bThreshold: number
+        if (appearance === 'lightGold') {
+          bStrength = 0.07
+          bRadius = 0.08
+          bThreshold = 0.88
+        } else if (lowBloom) {
+          bStrength = 0.16
+          bRadius = 0.12
+          bThreshold = 0.72
+        } else {
+          bStrength = 0.95
+          bRadius = 0.38
+          bThreshold = 0.5
+        }
+        const bloomPass = new UnrealBloomPass(bloomDims, bStrength, bRadius, bThreshold)
         composer.addPass(bloomPass)
         bloomPassRef.current = bloomPass
         composerRef.current = composer
@@ -498,6 +527,8 @@ export default function LoadingParticles({
     particleSizeScale,
     lines.join('\0'),
     cursorRepelHex,
+    appearance,
+    clearColorHex,
   ])
 
   // Priority 1: take over rendering so R3F does not run gl.render() after this and overwrite our composer output
@@ -573,7 +604,10 @@ export default function LoadingParticles({
 
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.8)
     if (bloomPassRef.current) {
-      if (lowBloomRef.current) {
+      if (appearanceRef.current === 'lightGold') {
+        bloomPassRef.current.strength = 0.055 + pulse * 0.035
+        bloomPassRef.current.radius = 0.065 + pulse * 0.03
+      } else if (lowBloomRef.current) {
         bloomPassRef.current.strength = 0.12 + pulse * 0.08
         bloomPassRef.current.radius = 0.08 + pulse * 0.04
       } else {

@@ -9,8 +9,12 @@ import GPGPUUtils, { type SampledData } from './GPGPUUtils'
 import { PARTICLE_CURSOR_ACCENT } from './particleCursorColor'
 import { simFragment, simFragmentVelocity, vertexShader, fragmentShader } from './shaders'
 
+const DEFAULT_IDLE_LOW = new THREE.Color(0.72, 0.74, 0.78)
+
 export interface GPGPUParams {
   color: THREE.Color
+  /** Low end of idle pulse (defaults to cool silver for dark backgrounds) */
+  idleLowColor?: THREE.Color
   /** Particle colour when cursor repels (defaults to `PARTICLE_CURSOR_ACCENT` / #63E5FF) */
   cursorColor?: THREE.Color
   size: number
@@ -139,6 +143,9 @@ export default class GPGPU {
         uResolution: { value: new THREE.Vector2(this.sizes.width, this.sizes.height) },
         uParticleSize: { value: this.params.size },
         uColor: { value: this.params.color },
+        uIdleLow: {
+          value: (this.params.idleLowColor ?? DEFAULT_IDLE_LOW).clone(),
+        },
         uCursorColor: {
           value: this.params.cursorColor?.clone() ?? PARTICLE_CURSOR_ACCENT.clone(),
         },

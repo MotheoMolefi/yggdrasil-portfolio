@@ -117,6 +117,7 @@ varying float vProgressCoord;
 
 uniform sampler2D uVelocityTexture;
 uniform vec3 uColor;
+uniform vec3 uIdleLow;
 uniform vec3 uCursorColor;
 uniform float uMinAlpha;
 uniform float uMaxAlpha;
@@ -132,11 +133,10 @@ void main() {
   float speed = length(velocity);
   float repelled = min(1.0, speed * 0.4);
   float velocityAlpha = mix(uMinAlpha, uMaxAlpha, repelled) * vBrightness;
-  /* Idle: pulse light silver → uColor (white). Cursor repel: vivid uCursorColor */
+  /* Idle: pulse uIdleLow → uColor. Cursor repel: vivid uCursorColor */
   float interact = smoothstep(0.012, 0.09, repelled);
-  vec3 silverLow = vec3(0.72, 0.74, 0.78);
   float metalPulse = 0.5 + 0.5 * sin(uIdleTime * 1.05);
-  vec3 idleBase = mix(silverLow, uColor, metalPulse);
+  vec3 idleBase = mix(uIdleLow, uColor, metalPulse);
   float punch = mix(1.0, 1.14, interact);
   vec3 accent = uCursorColor * (1.0 + 0.22 * interact);
   vec3 baseColor = mix(idleBase, accent, interact) * vBrightness * punch;

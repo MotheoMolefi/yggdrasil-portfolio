@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Environment } from '@react-three/drei'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
@@ -16,6 +16,7 @@ import WelcomeScreen from './WelcomeScreen'
 import ParticleLoadingBar from './ParticleLoadingBar'
 import LoadingParticles, { PARTICLE_LINES_LOADING } from './LoadingParticles'
 import { projects } from '../data/projects'
+import { GALAXY_SKYBOX_FILES } from '../lib/galaxySkybox'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
 
 // ============================================================================
@@ -249,7 +250,7 @@ function CinematicCamera({
         wasLocked.current = true
       }
 
-      const ZOOM_SPEED = 0.003
+      const ZOOM_SPEED = 0.0046
       const VIEW_DISTANCE = 150
 
       // Compute the "viewing" position: offset from orb, facing it
@@ -293,7 +294,7 @@ function CinematicCamera({
         zoomProgress.current = 1
       }
 
-      const ZOOM_SPEED = 0.005
+      const ZOOM_SPEED = 0.0072
       zoomProgress.current = Math.max(0, zoomProgress.current - ZOOM_SPEED)
 
       const t = zoomProgress.current
@@ -432,10 +433,13 @@ function CinematicCamera({
 // GUIDED CAMERA CONTROLLER
 // Continuous-scroll tour: wheel drives smooth interpolation between waypoints
 // ============================================================================
-/** First cinematic/guided waypoint — keep in sync with main `<Canvas camera>` position. */
-const OVERVIEW_CAMERA_POSITION: [number, number, number] = [0, 1347, 3985]
-/** Look target toward tree mass (symmetric framing; was offset at -100 X). */
-const OVERVIEW_CAMERA_LOOK_AT = new THREE.Vector3(0, 1500, 0)
+/**
+ * First cinematic/guided waypoint — keep in sync with main `<Canvas camera>` position.
+ * Pulled in from far Z so the welcome blur preview isn’t empty space outside the cloud volume;
+ * still aimed high enough to keep most of the canopy in frame for guided start.
+ */
+const OVERVIEW_CAMERA_POSITION: [number, number, number] = [0, 1500, 4100]
+const OVERVIEW_CAMERA_LOOK_AT = new THREE.Vector3(0, 1800, 0)
 
 const GUIDED_WAYPOINTS = (() => {
   const overview = {
@@ -569,7 +573,7 @@ function GuidedCamera({
         wasLocked.current = true
       }
 
-      const ZOOM_SPEED = 0.003
+      const ZOOM_SPEED = 0.0046
       const VIEW_DISTANCE = 150
       const orbPos = new THREE.Vector3(...zoomTarget)
       const dirToOrb = orbPos.clone().sub(savedPosition.current).normalize()
@@ -599,7 +603,7 @@ function GuidedCamera({
         zoomProgress.current = 1
       }
 
-      const ZOOM_SPEED = 0.005
+      const ZOOM_SPEED = 0.0072
       zoomProgress.current = Math.max(0, zoomProgress.current - ZOOM_SPEED)
       const t = zoomProgress.current
       const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
@@ -1041,17 +1045,7 @@ function World({
     <>
       {/* ========== ENVIRONMENT / SKYBOX ========== */}
       {/* Galaxy cubemap for visible background */}
-      <Environment
-        files={[
-          '/skybox/px.png',  // Right (+X)
-          '/skybox/nx.png',  // Left (-X)
-          '/skybox/py.png',  // Up (+Y)
-          '/skybox/ny.png',  // Down (-Y)
-          '/skybox/nz.png',  // Back (-Z)
-          '/skybox/pz.png',  // Front (+Z)
-        ]}
-        background
-      />
+      <Environment files={[...GALAXY_SKYBOX_FILES]} background />
       <Environment preset={themePreset} background={false} />
       <SceneEnvironmentIntensity intensity={0.3} />
 
@@ -1375,11 +1369,11 @@ const RATATOSKR_NAVIGATE_MAP: Record<string, { id: string; position: [number, nu
 }
 
 // ============================================================================
-// LOADING SCREEN — Norse title + 2D loading bar
+// LOADING SCREEN — Galaxy_blue cubemap (public/skybox) + gold particles + dark bar
 // ============================================================================
 function LoadingScreen({ progress }: { progress: number }) {
   return (
-    <div className="relative h-full w-full bg-[#050510]">
+    <div className="relative h-full w-full bg-[#03040a]">
       <Canvas
         className="absolute inset-0 block h-full w-full touch-none"
         camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 15000 }}
@@ -1391,16 +1385,21 @@ function LoadingScreen({ progress }: { progress: number }) {
         frameloop="always"
         dpr={[1, 2]}
       >
+        <Suspense fallback={null}>
+          <Environment files={[...GALAXY_SKYBOX_FILES]} background />
+        </Suspense>
         <LoadingParticles
           lines={PARTICLE_LINES_LOADING}
           transparentBackground={false}
           lowBloom
+          appearance="lightGold"
+          clearColorHex={0x03040a}
           textScale={1.38}
           particleSizeScale={0.55}
         />
       </Canvas>
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-16">
-        <ParticleLoadingBar progress={progress} />
+        <ParticleLoadingBar progress={progress} variant="dark" />
       </div>
     </div>
   )
@@ -1411,6 +1410,9 @@ function LoadingScreen({ progress }: { progress: number }) {
 // ============================================================================
 // Set to true to keep the particle loading screen visible (for testing). Set to false for normal flow.
 const KEEP_LOADING_SCREEN = false
+
+/** If trees finish before this, hold the loading screen so the particle beat is visible (ms). */
+const LOADING_SOFT_FLOOR_MS = 3500
 
 export default function Scene() {
   const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading')
@@ -1573,10 +1575,11 @@ export default function Scene() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [isLocked])
 
-  // Pre-load: gate on tree models only (largest scene requirement). Ratatoskr + cloud warm in parallel
-  // so the bar finishes sooner; drei's useGLTF still benefits from LoadingManager cache.
+  // Pre-load: gate on tree models only (largest scene requirement). Ratatoskr + cloud warm in parallel.
+  // Soft floor: after assets are ready, stay on the loader until LOADING_SOFT_FLOOR_MS from start (if any time left).
   useEffect(() => {
     const loader = new GLTFLoader()
+    const loadStartedAt = Date.now()
     const criticalUrls = [
       '/Yggdrasil_Tree_GoodBake1.glb',
       '/Yggdrasil_Tree_MetallicLook.glb',
@@ -1588,7 +1591,9 @@ export default function Scene() {
       setProgress(Math.min(99, (criticalLoaded / criticalUrls.length) * 100))
       if (criticalLoaded === criticalUrls.length) {
         setProgress(100)
-        setTimeout(() => setLoadingState('ready'), 200)
+        const elapsed = Date.now() - loadStartedAt
+        const remaining = Math.max(0, LOADING_SOFT_FLOOR_MS - elapsed)
+        setTimeout(() => setLoadingState('ready'), remaining + 150)
       }
     }
 
