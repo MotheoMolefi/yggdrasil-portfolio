@@ -10,7 +10,7 @@ import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import { ExtrudeGeometry, Shape } from 'three'
-import { mergeBufferGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
@@ -72,8 +72,11 @@ function makeTextMesh(
   const size = new THREE.Vector3().subVectors(layoutMax, layoutMin)
   const maxDim = Math.max(size.x, size.y, size.z)
   const scale = maxDim > 0 ? targetScale / maxDim : 1
-  const geo = mergeBufferGeometries(geos)
+  const geo = mergeGeometries(geos)
   geos.forEach((g) => g.dispose())
+  if (!geo) {
+    throw new Error('[LoadingParticles] mergeGeometries returned null')
+  }
   const pos = geo.attributes.position
   for (let i = 0; i < pos.count; i++) {
     pos.setX(i, (pos.getX(i) - center.x) * scale)
@@ -129,7 +132,11 @@ function buildCharGeometry(font: Font, char: string, fontSize: number): THREE.Bu
   })
   if (holeFillShapes.length === 0) return geoMain
   const geoHoles = new ExtrudeGeometry(holeFillShapes, extrudeOpts)
-  const g = mergeBufferGeometries([geoMain, geoHoles])
+  const g = mergeGeometries([geoMain, geoHoles])
+  if (!g) {
+    geoHoles.dispose()
+    return geoMain
+  }
   geoMain.dispose()
   geoHoles.dispose()
   return g

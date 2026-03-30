@@ -19,6 +19,23 @@ import { projects } from '../data/projects'
 import { GALAXY_SKYBOX_FILES } from '../lib/galaxySkybox'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
 
+/** Logs context loss; `preventDefault` keeps the browser from hard-reloading the tab immediately. */
+function WebglContextLossGuard() {
+  const { gl } = useThree()
+  useEffect(() => {
+    const canvas = gl.domElement
+    const onLost = (e: Event) => {
+      e.preventDefault()
+      console.warn(
+        '[Scene] WebGL context lost — often GPU memory or too many canvases (loading + scene + welcome).'
+      )
+    }
+    canvas.addEventListener('webglcontextlost', onLost)
+    return () => canvas.removeEventListener('webglcontextlost', onLost)
+  }, [gl])
+  return null
+}
+
 // ============================================================================
 // CINEMATIC CAMERA CONTROLLER
 // Custom fly/free camera with smooth movement and mouse-based look controls
@@ -1378,15 +1395,16 @@ function LoadingScreen({ progress }: { progress: number }) {
         className="absolute inset-0 block h-full w-full touch-none"
         camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 15000 }}
         gl={{
-          antialias: true,
+          antialias: false,
           alpha: false,
-          powerPreference: 'high-performance',
+          powerPreference: 'default',
+          stencil: false,
         }}
         frameloop="always"
-        dpr={[1, 2]}
+        dpr={1}
       >
         <Suspense fallback={null}>
-          <Environment files={[...GALAXY_SKYBOX_FILES]} background />
+          <Environment files={[...GALAXY_SKYBOX_FILES]} background resolution={128} />
         </Suspense>
         <LoadingParticles
           lines={PARTICLE_LINES_LOADING}
@@ -1636,7 +1654,9 @@ export default function Scene() {
       <div
         className="absolute inset-0 overflow-hidden"
         style={{
-          filter: showWelcome ? 'blur(14px) brightness(0.48)' : 'blur(0px) brightness(1)',
+          filter: showWelcome
+            ? 'blur(14px) brightness(0.34) saturate(0.28)'
+            : 'blur(0px) brightness(1) saturate(1)',
           transform: showWelcome ? 'scale(1.04)' : 'scale(1)',
           transition: 'filter 0.85s cubic-bezier(0.4, 0, 0.2, 1), transform 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: showWelcome ? 'filter, transform' : 'auto',
@@ -1646,13 +1666,16 @@ export default function Scene() {
           className="block h-full w-full touch-none"
           shadows
           camera={{ position: OVERVIEW_CAMERA_POSITION, fov: 52, near: 0.1, far: 20000 }}
+          dpr={showWelcome ? 1 : [1, 2]}
           gl={{
             antialias: true,
             outputColorSpace: THREE.SRGBColorSpace,
             toneMapping: THREE.ACESFilmicToneMapping,
             toneMappingExposure: 1.08,
+            powerPreference: 'default',
           }}
         >
+          <WebglContextLossGuard />
           <World
             activeProjectId={activeProjectId}
             viewingProjectId={viewingProjectId}
@@ -1674,6 +1697,17 @@ export default function Scene() {
           />
         </Canvas>
       </div>
+      {/* Cool wash over blurred scene so warm/yellow highlights don't leak through welcome transition */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          opacity: showWelcome ? 1 : 0,
+          background:
+            'radial-gradient(ellipse 78% 64% at 50% 50%, rgba(92, 148, 255, 0.18) 0%, rgba(58, 108, 220, 0.16) 36%, rgba(18, 44, 128, 0.24) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      />
 
       {/* ========== GUIDED TOUR: SCROLL PROGRESS + HINT ========== */}
       {cameraMode === 'guided' && !zoomReached && (

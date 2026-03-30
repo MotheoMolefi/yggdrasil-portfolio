@@ -117,7 +117,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
               depth: false,
             }}
             frameloop="always"
-            dpr={[1, 2]}
+            dpr={1}
             style={{ display: 'block', width: '100%', height: '100%' }}
           >
             <LoadingParticles
