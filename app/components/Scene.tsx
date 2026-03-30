@@ -1,6 +1,6 @@
 'use client'
 
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber'
 import { useGLTF, Environment } from '@react-three/drei'
 import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -8,15 +8,41 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import * as THREE from 'three'
+import { RGBELoader } from 'three-stdlib'
 import ProjectOrb from './ProjectOrb'
 import ProjectPanel from './ProjectPanel'
-import RatatoskrModel from './RatatoskrModel'
+import RatatoskrModel, { RATATOSKR_PERCH } from './RatatoskrModel'
 import RatatoskrChat from './RatatoskrChat'
 import WelcomeScreen from './WelcomeScreen'
 import ParticleLoadingBar from './ParticleLoadingBar'
+import { useNorseFontsReady } from '../hooks/useNorseFontsReady'
 import { projects } from '../data/projects'
 import { GALAXY_SKYBOX_FILES } from '../lib/galaxySkybox'
-import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
+import { presetsObj, type PresetsType } from '@react-three/drei/helpers/environment-assets'
+
+/** Same HDRI base URL as drei's `useEnvironment` preset loader (drei ~9.92). */
+const DREI_HDRI_BASE =
+  'https://raw.githack.com/pmndrs/drei-assets/456060a26bbeb8fdf79326f224b6d99b8bcce736/hdri/'
+
+/** Presets cycled with T — preloaded so switching never suspends on first visit. */
+const THEME_CYCLE_PRESETS: readonly PresetsType[] = [
+  'city',
+  'dawn',
+  'forest',
+  'lobby',
+  'park',
+  'sunset',
+  'warehouse',
+]
+
+if (typeof window !== 'undefined') {
+  for (const preset of THEME_CYCLE_PRESETS) {
+    const file = presetsObj[preset]
+    useLoader.preload(RGBELoader, file, (loader) => {
+      loader.setPath(DREI_HDRI_BASE)
+    })
+  }
+}
 
 /** Logs context loss; `preventDefault` keeps the browser from hard-reloading the tab immediately. */
 function WebglContextLossGuard() {
@@ -35,6 +61,17 @@ function WebglContextLossGuard() {
   return null
 }
 
+function lerpShortestAngleYRad(a: number, b: number, t: number) {
+  let d = b - a
+  while (d > Math.PI) d -= Math.PI * 2
+  while (d < -Math.PI) d += Math.PI * 2
+  return a + d * t
+}
+
+/** Camera relative to perch: +X / +Z ≈ in front of squirrel (was too far −X → side profile). */
+const RATATOSKR_CAM_OFFSET = new THREE.Vector3(220, 58, 400)
+const RATATOSKR_LOOK_OFFSET = new THREE.Vector3(0, 95, 0)
+
 // ============================================================================
 // CINEMATIC CAMERA CONTROLLER
 // Custom fly/free camera with smooth movement and mouse-based look controls
@@ -52,6 +89,7 @@ function CinematicCamera({
   locked = false,           // When true, all movement/look is disabled (for orb zoom)
   disableLook = false,      // When true, mouse look is suppressed (e.g. hovering over chat)
   zoomTarget,               // World-space position to fly toward when locked
+  ratatoskrChatOpen = false,
   onInteract,               // Called when E is pressed
   onExit,                   // Called when Escape is pressed
   onZoomComplete,           // Called when camera reaches the orb
@@ -68,6 +106,7 @@ function CinematicCamera({
   locked?: boolean
   disableLook?: boolean
   zoomTarget?: [number, number, number] | null
+  ratatoskrChatOpen?: boolean
   onInteract?: () => void
   onExit?: () => void
   onZoomComplete?: () => void
@@ -103,6 +142,16 @@ function CinematicCamera({
   const introProgress = useRef(0)
   const introStartPos = useRef(new THREE.Vector3())
   const introStartLook = useRef(new THREE.Vector3())
+
+  const prevRatChatOpen = useRef(false)
+  const ratLerpT = useRef(0)
+  const ratLerping = useRef(false)
+  const ratStartPos = useRef(new THREE.Vector3())
+  const ratStartYaw = useRef(0)
+  const ratStartPitch = useRef(0)
+  const ratTargetYaw = useRef(0)
+  const ratTargetPitch = useRef(0)
+  const ratTargetPos = useRef(new THREE.Vector3())
 
   useEffect(() => {
     const dist = camera.position.distanceTo(FREE_ROAM_START)
@@ -233,7 +282,9 @@ function CinematicCamera({
   const wasLocked = useRef(false)
 
   // ========== FRAME UPDATE (runs every frame) ==========
-  useFrame(() => {
+  useFrame((_, delta) => {
+    if (locked) ratLerping.current = false
+
     // ===== INTRO LERP (smooth transition from guided mode) =====
     if (introLerping.current) {
       introProgress.current = Math.min(1, introProgress.current + 0.004)
@@ -250,6 +301,46 @@ function CinematicCamera({
         currentYaw.current = camera.rotation.y
         currentPitch.current = camera.rotation.x
       }
+      return
+    }
+
+    // ===== RATATOSKR (R) — ease camera toward perch (free roam only) =====
+    const chatNow = ratatoskrChatOpen
+    if (chatNow && !prevRatChatOpen.current && !locked) {
+      const perch = new THREE.Vector3(...RATATOSKR_PERCH)
+      ratTargetPos.current.copy(perch).add(RATATOSKR_CAM_OFFSET)
+      const look = perch.clone().add(RATATOSKR_LOOK_OFFSET)
+      const fwd = look.clone().sub(ratTargetPos.current).normalize()
+      ratTargetYaw.current = Math.atan2(-fwd.x, -fwd.z)
+      ratTargetPitch.current = Math.asin(Math.max(-0.999, Math.min(0.999, fwd.y)))
+      ratStartPos.current.copy(camera.position)
+      ratStartYaw.current = currentYaw.current
+      ratStartPitch.current = currentPitch.current
+      ratLerpT.current = 0
+      ratLerping.current = true
+    }
+    if (!chatNow && prevRatChatOpen.current) {
+      ratLerping.current = false
+    }
+    prevRatChatOpen.current = chatNow
+
+    if (ratLerping.current && chatNow && !locked) {
+      const durationSec = 2.75
+      ratLerpT.current = Math.min(1, ratLerpT.current + delta / durationSec)
+      const t = ratLerpT.current
+      const ease = 1 - Math.pow(1 - t, 2.35)
+      camera.position.lerpVectors(ratStartPos.current, ratTargetPos.current, ease)
+      currentYaw.current = lerpShortestAngleYRad(
+        ratStartYaw.current,
+        ratTargetYaw.current,
+        ease
+      )
+      currentPitch.current =
+        ratStartPitch.current + (ratTargetPitch.current - ratStartPitch.current) * ease
+      camera.rotation.order = 'YXZ'
+      camera.rotation.y = currentYaw.current
+      camera.rotation.x = currentPitch.current
+      if (t >= 1) ratLerping.current = false
       return
     }
 
@@ -485,6 +576,7 @@ const SCROLL_LERP_SPEED = 0.04
 function GuidedCamera({
   locked = false,
   zoomTarget,
+  ratatoskrChatOpen = false,
   onInteract,
   onExit,
   onZoomComplete,
@@ -494,6 +586,7 @@ function GuidedCamera({
 }: {
   locked?: boolean
   zoomTarget?: [number, number, number] | null
+  ratatoskrChatOpen?: boolean
   onInteract?: () => void
   onExit?: () => void
   onZoomComplete?: () => void
@@ -521,6 +614,18 @@ function GuidedCamera({
   const zoomCompleted = useRef(false)
   const wasLocked = useRef(false)
 
+  const prevRatChatOpen = useRef(false)
+  const ratLerpT = useRef(0)
+  const ratLerping = useRef(false)
+  const ratStartPos = useRef(new THREE.Vector3())
+  const ratStartYaw = useRef(0)
+  const ratStartPitch = useRef(0)
+  const ratTargetYaw = useRef(0)
+  const ratTargetPitch = useRef(0)
+  const ratTargetPos = useRef(new THREE.Vector3())
+  /** Tour progress before Ratatoskr lerp — restoring avoids snapping to nearest waypoint (e.g. pink Mashonisa leg). */
+  const scrollBeforeRat = useRef<number | null>(null)
+
   const maxProgress = GUIDED_WAYPOINTS.length - 1
 
   useEffect(() => {
@@ -547,7 +652,7 @@ function GuidedCamera({
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
-      if (locked || !introReady.current) return
+      if (locked || !introReady.current || ratatoskrChatOpen) return
 
       scrollTarget.current -= e.deltaY * SCROLL_SENSITIVITY
       scrollTarget.current = Math.max(0, Math.min(maxProgress, scrollTarget.current))
@@ -573,9 +678,11 @@ function GuidedCamera({
       canvas.removeEventListener('wheel', handleWheel)
       window.removeEventListener('keydown', handleKeys)
     }
-  }, [gl, locked, onInteract, onExit, maxProgress])
+  }, [gl, locked, onInteract, onExit, maxProgress, ratatoskrChatOpen])
 
-  useFrame(() => {
+  useFrame((_, delta) => {
+    if (locked) ratLerping.current = false
+
     // ===== ZOOM FLY-TO (orb inspection) =====
     if (locked && zoomTarget) {
       if (!wasLocked.current) {
@@ -639,6 +746,66 @@ function GuidedCamera({
         wasLocked.current = false
         isZooming.current = null
       }
+      return
+    }
+
+    // ===== RATATOSKR (R) — ease camera toward perch =====
+    const chatNow = ratatoskrChatOpen
+    if (chatNow && !prevRatChatOpen.current && !locked) {
+      if (!introReady.current) {
+        introReady.current = true
+        introProgress.current = 1
+        if (!introFired.current && onReady) {
+          introFired.current = true
+          onReady()
+        }
+      }
+      scrollBeforeRat.current = scrollCurrent.current
+      const perch = new THREE.Vector3(...RATATOSKR_PERCH)
+      ratTargetPos.current.copy(perch).add(RATATOSKR_CAM_OFFSET)
+      const look = perch.clone().add(RATATOSKR_LOOK_OFFSET)
+      const fwd = look.clone().sub(ratTargetPos.current).normalize()
+      ratTargetYaw.current = Math.atan2(-fwd.x, -fwd.z)
+      ratTargetPitch.current = Math.asin(Math.max(-0.999, Math.min(0.999, fwd.y)))
+      ratStartPos.current.copy(camera.position)
+      const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
+      ratStartYaw.current = e.y
+      ratStartPitch.current = e.x
+      ratLerpT.current = 0
+      ratLerping.current = true
+    }
+    if (!chatNow && prevRatChatOpen.current) {
+      ratLerping.current = false
+      if (scrollBeforeRat.current !== null) {
+        const s = Math.max(0, Math.min(maxProgress, scrollBeforeRat.current))
+        scrollTarget.current = s
+        scrollCurrent.current = s
+        scrollBeforeRat.current = null
+      }
+    }
+    prevRatChatOpen.current = chatNow
+
+    if (ratLerping.current && chatNow && !locked) {
+      const durationSec = 2.75
+      ratLerpT.current = Math.min(1, ratLerpT.current + delta / durationSec)
+      const t = ratLerpT.current
+      const ease = 1 - Math.pow(1 - t, 2.35)
+      camera.position.lerpVectors(ratStartPos.current, ratTargetPos.current, ease)
+      const y = lerpShortestAngleYRad(ratStartYaw.current, ratTargetYaw.current, ease)
+      const p = ratStartPitch.current + (ratTargetPitch.current - ratStartPitch.current) * ease
+      camera.rotation.order = 'YXZ'
+      camera.rotation.y = y
+      camera.rotation.x = p
+      if (t >= 1) ratLerping.current = false
+      return
+    }
+
+    // Hold Ratatoskr framing while chat is open (scroll path would otherwise snap camera back).
+    if (chatNow && !locked && introReady.current && !ratLerping.current) {
+      camera.position.copy(ratTargetPos.current)
+      camera.rotation.order = 'YXZ'
+      camera.rotation.y = ratTargetYaw.current
+      camera.rotation.x = ratTargetPitch.current
       return
     }
 
@@ -729,11 +896,12 @@ function CinematicOrbitCamera({ onComplete }: { onComplete?: () => void }) {
   }, [])
 
   useFrame(() => {
-    if (done.current) return
     if (!introReady.current) return
 
     const wps = waypoints.current
     const maxProgress = wps.length - 1
+
+    if (done.current) return
 
     progress.current = Math.min(maxProgress, progress.current + CINEMATIC_SPEED)
 
@@ -1133,6 +1301,7 @@ function World({
           locked={isLocked}
           disableLook={disableLook}
           zoomTarget={zoomTarget}
+          ratatoskrChatOpen={chatOpen}
           onInteract={onInteract}
           onExit={onExit}
           onZoomComplete={onZoomComplete}
@@ -1145,6 +1314,7 @@ function World({
         <GuidedCamera
           locked={isLocked}
           zoomTarget={zoomTarget}
+          ratatoskrChatOpen={chatOpen}
           onInteract={onInteract}
           onExit={onExit}
           onZoomComplete={onZoomComplete}
@@ -1399,6 +1569,7 @@ const LOADING_PORTAL_BACK_LAYERS = [
 ] as const
 
 function LoadingScreen({ progress }: { progress: number }) {
+  const norseReady = useNorseFontsReady()
   const titleTypography = {
     fontFamily: "'Norse', system-ui, sans-serif",
     fontWeight: 'bold' as const,
@@ -1424,7 +1595,13 @@ function LoadingScreen({ progress }: { progress: number }) {
         </Suspense>
       </Canvas>
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4 sm:px-6">
-        <div className="loading-portal-title-wrap relative inline-grid place-items-center">
+        <div
+          className="loading-portal-title-wrap relative inline-grid place-items-center"
+          style={{
+            opacity: norseReady ? 1 : 0,
+            transition: 'opacity 0.35s ease',
+          }}
+        >
           {LOADING_PORTAL_BACK_LAYERS.map((layer, i) => (
             <span
               key={i}
@@ -1525,6 +1702,7 @@ export default function Scene() {
   const [guidedTotal, setGuidedTotal] = useState(1)
   const [showScrollHint, setShowScrollHint] = useState(false)
   const scrollHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showRatatoskr, setShowRatatoskr] = useState(false)
 
   const handleScrollProgress = useCallback((progress: number, total: number) => {
     setGuidedProgress(progress)
@@ -1538,10 +1716,10 @@ export default function Scene() {
   }, [])
 
   const handleGuidedReady = useCallback(() => {
-    // Only show hint if the welcome screen is already gone
     if (showWelcome) return
+    if (showRatatoskr) return
     showScrollHintNow()
-  }, [showWelcome, showScrollHintNow])
+  }, [showWelcome, showScrollHintNow, showRatatoskr])
 
   const handleWelcomeDismiss = useCallback(() => {
     setShowWelcome(false)
@@ -1562,6 +1740,15 @@ export default function Scene() {
       if (scrollHintTimer.current) clearTimeout(scrollHintTimer.current)
     }
   }, [cameraMode])
+
+  useEffect(() => {
+    if (!showRatatoskr) return
+    setShowScrollHint(false)
+    if (scrollHintTimer.current) {
+      clearTimeout(scrollHintTimer.current)
+      scrollHintTimer.current = null
+    }
+  }, [showRatatoskr])
 
   // Orb interaction state (lifted here so ProjectPanel can access it)
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
@@ -1618,14 +1805,20 @@ export default function Scene() {
     setCameraMode('freeRoam')
   }, [])
 
-  const [showRatatoskr, setShowRatatoskr] = useState(false)
   const [chatHovered, setChatHovered] = useState(false)
   const [ratatoskrResponseCount, setRatatoskrResponseCount] = useState(0)
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (showWelcome) return
       if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey) {
-        setShowRatatoskr((v) => !v)
+        setShowRatatoskr((open) => {
+          const willOpen = !open
+          if (willOpen) {
+            setCameraMode((m) => (m === 'cinematic' ? 'guided' : m))
+          }
+          return willOpen
+        })
         return
       }
       if (e.code === 'KeyG' && !isLocked) {
@@ -1635,10 +1828,10 @@ export default function Scene() {
         setCameraMode((m) => (m === 'cinematic' ? 'freeRoam' : 'cinematic'))
       }
       if (e.code === 'KeyT' && !isLocked) {
-        const presets: PresetsType[] = ['city', 'dawn', 'forest', 'lobby', 'park', 'sunset', 'warehouse']
         setThemePreset((current) => {
-          const idx = presets.indexOf(current)
-          return presets[(idx + 1) % presets.length]
+          const idx = THEME_CYCLE_PRESETS.indexOf(current)
+          const next = idx < 0 ? 0 : (idx + 1) % THEME_CYCLE_PRESETS.length
+          return THEME_CYCLE_PRESETS[next]
         })
       }
       if (e.code === 'KeyM') {
@@ -1647,7 +1840,7 @@ export default function Scene() {
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [isLocked])
+  }, [isLocked, showWelcome])
 
   // Pre-load: gate on tree models only (largest scene requirement). Ratatoskr + cloud warm in parallel.
   // Soft floor: after assets are ready, stay on the loader until LOADING_SOFT_FLOOR_MS from start (if any time left).
@@ -1765,7 +1958,7 @@ export default function Scene() {
       />
 
       {/* ========== GUIDED TOUR: SCROLL PROGRESS + HINT ========== */}
-      {cameraMode === 'guided' && !zoomReached && (
+      {cameraMode === 'guided' && !zoomReached && !showRatatoskr && (
         <>
           {/* Scroll progress bar — right edge */}
           <div

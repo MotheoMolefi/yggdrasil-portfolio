@@ -30,7 +30,8 @@ interface RatatoskrModelProps {
   responseCount?: number
 }
 
-const PERCH_POSITION: [number, number, number] = [-400, 1775, 250]
+/** World-space perch — used by `CinematicCamera` Ratatoskr focus lerp; keep in sync here only. */
+export const RATATOSKR_PERCH: [number, number, number] = [-400, 1775, 250]
 const PERCH_ROTATION_Y = -Math.PI * 0.15 + (30 * Math.PI / 180)
 
 export default function RatatoskrModel({ chatOpen, responseCount = 0 }: RatatoskrModelProps) {
@@ -177,8 +178,8 @@ export default function RatatoskrModel({ chatOpen, responseCount = 0 }: Ratatosk
     if (!group.current) return
 
     if (chatOpen) {
-      const dx = camera.position.x - PERCH_POSITION[0]
-      const dz = camera.position.z - PERCH_POSITION[2]
+      const dx = camera.position.x - RATATOSKR_PERCH[0]
+      const dz = camera.position.z - RATATOSKR_PERCH[2]
       currentRotY.current += (Math.atan2(dx, dz) - currentRotY.current) * 0.06
     } else {
       currentRotY.current += (PERCH_ROTATION_Y - currentRotY.current) * 0.06
@@ -195,7 +196,7 @@ export default function RatatoskrModel({ chatOpen, responseCount = 0 }: Ratatosk
   return (
     <group
       ref={group}
-      position={PERCH_POSITION}
+      position={RATATOSKR_PERCH}
       rotation={[0, PERCH_ROTATION_Y, 0]}
       scale={4.5}
       dispose={null}

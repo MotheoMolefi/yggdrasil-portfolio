@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { WELCOME_PARTICLE_CURSOR_ACCENT_HEX } from '../lib/codrops/particleCursorColor'
+import { useNorseFontsReady } from '../hooks/useNorseFontsReady'
 import LoadingParticles, { PARTICLE_LINES_WELCOME } from './LoadingParticles'
 
 interface WelcomeScreenProps {
@@ -49,6 +50,7 @@ function useCanvasReady(visible: boolean) {
 }
 
 export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
+  const norseReady = useNorseFontsReady()
   const [phase, setPhase]     = useState<'intro' | 'controls'>('intro')
   const [exiting, setExiting] = useState(false)
   const [visible, setVisible] = useState(true)
@@ -154,6 +156,8 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
               fontSize: 'clamp(1.2rem, 3.65vw, 1.65rem)',
               color: 'rgba(248, 252, 255, 0.9)',
               letterSpacing: '0.12em',
+              opacity: norseReady ? 1 : 0,
+              transition: 'opacity 0.35s ease',
             }}
           >
             A 3D interactive portfolio site
