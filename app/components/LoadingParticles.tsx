@@ -32,8 +32,6 @@ const CYAN = new THREE.Color(0.4, 0.75, 0.9)
 const PALETTE = { GOLD, WHITE, COPPER, CYAN }
 /** Shader idles silver ↔ this white */
 const PARTICLE_COLOR = new THREE.Color(1, 1, 1)
-export { PARTICLE_CURSOR_ACCENT }
-const SHOW_HITBOX_DEBUG = false
 
 function makeSphereMesh(): THREE.Mesh {
   const geo = new THREE.SphereGeometry(280, 64, 64)
@@ -100,9 +98,7 @@ function makeTextMesh(
   return mesh
 }
 
-/** Particle copy for loading screen (same GPGPU text as before, moved off welcome) */
-export const PARTICLE_LINES_LOADING = ['Motheo Molefi Presents:'] as const
-/** Welcome title only — “Presents” line shows while GLBs load */
+/** Welcome overlay — particle title line */
 export const PARTICLE_LINES_WELCOME = ['Yggdrasil'] as const
 
 const DEFAULT_FONT_SIZE = 44
@@ -377,21 +373,6 @@ export default function LoadingParticles({
       const group = new THREE.Group()
       scene.add(group)
       group.add(mesh)
-      if (SHOW_HITBOX_DEBUG && mesh.geometry.boundingBox) {
-        const box = mesh.geometry.boundingBox
-        const size = new THREE.Vector3()
-        const center = new THREE.Vector3()
-        box.getSize(size)
-        box.getCenter(center)
-        const boxGeo = new THREE.BoxGeometry(size.x, size.y, size.z)
-        const edges = new THREE.EdgesGeometry(boxGeo)
-        const hitboxLines = new THREE.LineSegments(
-          edges,
-          new THREE.LineBasicMaterial({ color: 0x00ff88 })
-        )
-        hitboxLines.position.copy(center)
-        group.add(hitboxLines)
-      }
       groupRef.current = group
       meshRef.current = mesh
 

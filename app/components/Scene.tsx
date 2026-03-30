@@ -14,7 +14,6 @@ import RatatoskrModel from './RatatoskrModel'
 import RatatoskrChat from './RatatoskrChat'
 import WelcomeScreen from './WelcomeScreen'
 import ParticleLoadingBar from './ParticleLoadingBar'
-import LoadingParticles, { PARTICLE_LINES_LOADING } from './LoadingParticles'
 import { projects } from '../data/projects'
 import { GALAXY_SKYBOX_FILES } from '../lib/galaxySkybox'
 import type { PresetsType } from '@react-three/drei/helpers/environment-assets'
@@ -1386,11 +1385,29 @@ const RATATOSKR_NAVIGATE_MAP: Record<string, { id: string; position: [number, nu
 }
 
 // ============================================================================
-// LOADING SCREEN — Galaxy_blue cubemap (public/skybox) + gold particles + dark bar
+// LOADING SCREEN — Galaxy_blue; subtle layered echoes on title only (no bloom)
 // ============================================================================
+const LOADING_TITLE_FONT = 'clamp(5.56875rem, 17.325vw, 9.075rem)'
+const LOADING_PRESENTS_TEXT = 'Motheo Molefi Presents:' as const
+
+/** Deeper “tunnel” layers first — subtle offset + scale + cool tint */
+const LOADING_PORTAL_BACK_LAYERS = [
+  { scale: 0.92, tx: 6, ty: 11, opacity: 0.09, color: 'rgba(130, 175, 255, 0.9)' },
+  { scale: 0.945, tx: 4, ty: 7, opacity: 0.14, color: 'rgba(165, 200, 255, 0.92)' },
+  { scale: 0.97, tx: 3, ty: 4, opacity: 0.2, color: 'rgba(205, 225, 255, 0.94)' },
+  { scale: 0.99, tx: 1, ty: 2, opacity: 0.3, color: 'rgba(235, 242, 255, 0.96)' },
+] as const
+
 function LoadingScreen({ progress }: { progress: number }) {
+  const titleTypography = {
+    fontFamily: "'Norse', system-ui, sans-serif",
+    fontWeight: 'bold' as const,
+    fontSize: LOADING_TITLE_FONT,
+    letterSpacing: '0.06em',
+  }
+
   return (
-    <div className="relative h-full w-full bg-[#03040a]">
+    <div className="relative h-full w-full overflow-hidden bg-[#03040a]">
       <Canvas
         className="absolute inset-0 block h-full w-full touch-none"
         camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 15000 }}
@@ -1405,17 +1422,57 @@ function LoadingScreen({ progress }: { progress: number }) {
         <Suspense fallback={null}>
           <Environment files={[...GALAXY_SKYBOX_FILES]} background resolution={128} />
         </Suspense>
-        <LoadingParticles
-          lines={PARTICLE_LINES_LOADING}
-          transparentBackground={false}
-          lowBloom
-          appearance="lightGold"
-          clearColorHex={0x03040a}
-          textScale={1.38}
-          particleSizeScale={0.55}
-        />
       </Canvas>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-16">
+      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4 sm:px-6">
+        <div className="loading-portal-title-wrap relative inline-grid place-items-center">
+          {LOADING_PORTAL_BACK_LAYERS.map((layer, i) => (
+            <span
+              key={i}
+              className="loading-portal-echo col-start-1 row-start-1 m-0 whitespace-nowrap leading-none text-center"
+              style={{
+                ...titleTypography,
+                zIndex: i,
+                color: layer.color,
+                opacity: layer.opacity,
+                transform: `translate(${layer.tx}px, ${layer.ty}px) scale(${layer.scale})`,
+                transformOrigin: 'center center',
+                textShadow: '0 1px 8px rgba(0, 0, 0, 0.4)',
+              }}
+              aria-hidden
+            >
+              {LOADING_PRESENTS_TEXT}
+            </span>
+          ))}
+          <p
+            className="loading-portal-front col-start-1 row-start-1 m-0 whitespace-nowrap leading-none text-center"
+            style={{
+              ...titleTypography,
+              zIndex: 10,
+              color: 'rgba(255, 255, 255, 0.99)',
+              textShadow: '0 2px 12px rgba(0, 0, 0, 0.82)',
+            }}
+          >
+            {LOADING_PRESENTS_TEXT}
+          </p>
+        </div>
+      </div>
+      <style>{`
+        .loading-portal-title-wrap {
+          isolation: isolate;
+          animation: loadingPortalPulse 5.5s ease-in-out infinite;
+        }
+        @keyframes loadingPortalPulse {
+          0%, 100% {
+            transform: scale(1);
+            filter: brightness(1);
+          }
+          50% {
+            transform: scale(1.02);
+            filter: brightness(1.06);
+          }
+        }
+      `}</style>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-6 pb-16">
         <ParticleLoadingBar progress={progress} variant="dark" />
       </div>
     </div>
@@ -1425,10 +1482,10 @@ function LoadingScreen({ progress }: { progress: number }) {
 // ============================================================================
 // SCENE - Root Component
 // ============================================================================
-// Set to true to keep the particle loading screen visible (for testing). Set to false for normal flow.
+// Set to true to keep the loading screen visible (for testing). Set to false for normal flow.
 const KEEP_LOADING_SCREEN = false
 
-/** If trees finish before this, hold the loading screen so the particle beat is visible (ms). */
+/** Minimum time on the loader after critical assets resolve (ms). */
 const LOADING_SOFT_FLOOR_MS = 3500
 
 export default function Scene() {
