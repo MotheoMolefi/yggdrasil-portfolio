@@ -1401,7 +1401,6 @@ function LoadingScreen({ progress }: { progress: number }) {
           stencil: false,
         }}
         frameloop="always"
-        dpr={1}
       >
         <Suspense fallback={null}>
           <Environment files={[...GALAXY_SKYBOX_FILES]} background resolution={128} />
@@ -1666,7 +1665,6 @@ export default function Scene() {
           className="block h-full w-full touch-none"
           shadows
           camera={{ position: OVERVIEW_CAMERA_POSITION, fov: 52, near: 0.1, far: 20000 }}
-          dpr={showWelcome ? 1 : [1, 2]}
           gl={{
             antialias: true,
             outputColorSpace: THREE.SRGBColorSpace,
