@@ -1239,8 +1239,8 @@ function World({
         position={[0, -10, 0]}         // Below (underlight, dramatic)
         // intensity={0.6}
         castShadow
-        shadow-mapSize-width={4096}
-        shadow-mapSize-height={4096}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-near={0.5}
         shadow-camera-far={200}
         shadow-camera-left={-120}
@@ -1582,6 +1582,7 @@ function LoadingScreen({ progress }: { progress: number }) {
       <Canvas
         className="absolute inset-0 block h-full w-full touch-none"
         camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 15000 }}
+        dpr={[1, 1.25]}
         gl={{
           antialias: false,
           alpha: false,
@@ -1914,6 +1915,7 @@ export default function Scene() {
         <Canvas
           className="block h-full w-full touch-none"
           shadows
+          dpr={[1, 1.5]}
           camera={{ position: OVERVIEW_CAMERA_POSITION, fov: 52, near: 0.1, far: 20000 }}
           gl={{
             antialias: true,

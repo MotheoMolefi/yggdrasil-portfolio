@@ -4,6 +4,11 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Yggdrasil Portfolio',
   description: 'An interactive 3D portfolio featuring the World Tree',
+  icons: {
+    icon: '/Yggdrasil_favicon.png?v=2',
+    shortcut: '/Yggdrasil_favicon.png?v=2',
+    apple: '/Yggdrasil_favicon.png?v=2',
+  },
 }
 
 export default function RootLayout({
