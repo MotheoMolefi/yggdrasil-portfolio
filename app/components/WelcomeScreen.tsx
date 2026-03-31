@@ -21,18 +21,6 @@ const CONTROLS = [
   { keys: ['Esc'], label: 'Close panels' },
 ]
 
-// One frame delay so the 3D scene paints first — avoids flash when transitioning from loading screen
-function usePaintReady() {
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => setReady(true))
-    })
-    return () => cancelAnimationFrame(id)
-  }, [])
-  return ready
-}
-
 // Defer Canvas mount until container is in DOM so R3F connect() doesn't see null
 function useCanvasReady(visible: boolean) {
   const [canvasReady, setCanvasReady] = useState(false)
@@ -54,7 +42,6 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
   const [phase, setPhase]     = useState<'intro' | 'controls'>('intro')
   const [exiting, setExiting] = useState(false)
   const [visible, setVisible] = useState(true)
-  const paintReady = usePaintReady()
   const showIntroParticles = visible && phase === 'intro'
   const canvasReady = useCanvasReady(showIntroParticles)
 
@@ -136,7 +123,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
       <div
         className="absolute inset-0 z-[2] flex flex-col items-center justify-center pointer-events-none select-none"
         style={{
-          opacity:   phase === 'intro' && paintReady ? 1 : 0,
+          opacity:   phase === 'intro' ? 1 : 0,
           transform: phase === 'intro' ? 'translateY(0px)' : 'translateY(-24px)',
           transition: 'opacity 0.5s ease, transform 0.5s ease',
         }}
