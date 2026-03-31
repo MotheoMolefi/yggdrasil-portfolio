@@ -23,6 +23,7 @@ bun run build
 3. **Set environment variable for Ratatoskr chat:**
    - Vercel dashboard → your project → **Settings** → **Environment Variables**
    - Add: `OPENAI_API_KEY` = your OpenAI API key
+   - Status: configured in Vercel for **Production** and **Preview**.
    - Redeploy so the API route can use it.
 
 4. **Production URL:** Vercel will give you a URL (e.g. `your-project.vercel.app`). Custom domain can be added in **Settings** → **Domains**.
