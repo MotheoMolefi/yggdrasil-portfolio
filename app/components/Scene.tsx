@@ -28,7 +28,7 @@ import { presetsObj, type PresetsType } from '@react-three/drei/helpers/environm
 const DREI_HDRI_BASE =
   'https://raw.githack.com/pmndrs/drei-assets/456060a26bbeb8fdf79326f224b6d99b8bcce736/hdri/'
 
-/** Presets cycled with T — preloaded so switching never suspends on first visit. */
+/** Presets cycled with T — only the initial scene preset preloads at startup (see idle prefetch below). */
 const THEME_CYCLE_PRESETS: readonly PresetsType[] = [
   'city',
   'dawn',
@@ -39,13 +39,14 @@ const THEME_CYCLE_PRESETS: readonly PresetsType[] = [
   'warehouse',
 ]
 
+/** Only this HDRI preloads at module load; rest prefetch on idle (see Scene `useEffect`). */
+const INITIAL_ENV_PRESET: PresetsType = 'park'
+
 if (typeof window !== 'undefined') {
-  for (const preset of THEME_CYCLE_PRESETS) {
-    const file = presetsObj[preset]
-    useLoader.preload(RGBELoader, file, (loader) => {
-      loader.setPath(DREI_HDRI_BASE)
-    })
-  }
+  const file = presetsObj[INITIAL_ENV_PRESET]
+  useLoader.preload(RGBELoader, file, (loader) => {
+    loader.setPath(DREI_HDRI_BASE)
+  })
 }
 
 /** Logs context loss; `preventDefault` keeps the browser from hard-reloading the tab immediately. */
@@ -1726,7 +1727,26 @@ export default function Scene() {
     if (audioRef.current) audioRef.current.muted = muted
   }, [muted])
 
-  const [themePreset, setThemePreset] = useState<PresetsType>('park')
+  // After first paint, prefetch other HDRI presets so T-cycling stays smooth without blocking load.
+  useEffect(() => {
+    const run = () => {
+      for (const preset of THEME_CYCLE_PRESETS) {
+        if (preset === INITIAL_ENV_PRESET) continue
+        const path = presetsObj[preset]
+        useLoader.preload(RGBELoader, path, (loader) => {
+          loader.setPath(DREI_HDRI_BASE)
+        })
+      }
+    }
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(run, { timeout: 12000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const t = window.setTimeout(run, 1500)
+    return () => clearTimeout(t)
+  }, [])
+
+  const [themePreset, setThemePreset] = useState<PresetsType>(INITIAL_ENV_PRESET)
   const [cameraMode, setCameraMode] = useState<'freeRoam' | 'guided' | 'cinematic'>('cinematic')
   const [isFullscreen, setIsFullscreen] = useState(false)
 

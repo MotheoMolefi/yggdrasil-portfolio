@@ -1,7 +1,5 @@
-import { GALAXY_SKYBOX_FILES } from './galaxySkybox'
-
-/** Cubemap faces — preload in root layout so the browser fetches before Scene mounts. */
-export const PRELOAD_SKYBOX_IMAGES: readonly string[] = [...GALAXY_SKYBOX_FILES]
+/** Cubemap face URLs (reference only — not used in `<link rel=preload>`; see `app/layout.tsx`). */
+export { GALAXY_SKYBOX_FILES as SKYBOX_FACE_URLS } from './galaxySkybox'
 
 /** Tree GLBs that gate leaving the loader — same URLs as `Scene` critical load. */
 export const PRELOAD_SCENE_GLBS = [

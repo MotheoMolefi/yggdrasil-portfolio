@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { PRELOAD_SKYBOX_IMAGES } from './lib/criticalPreload'
 
 export const metadata: Metadata = {
   title: 'Yggdrasil Portfolio',
@@ -20,15 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {PRELOAD_SKYBOX_IMAGES.map((href) => (
-          <link key={href} rel="preload" href={href} as="image" />
-        ))}
         {/*
-          Do NOT link-preload .glb / norse JSON as fetch. Chrome pairs that cache entry
-          with a different credential partition than GLTFLoader/FileLoader (XHR), which
-          triggers "credentials mode does not match", unused preload spam, and in
-          Incognito can surface ERR_CACHE_WRITE_FAILURE — breaking both preload and load.
-          Let Three loaders own those URLs as the single fetch path.
+          Do not link-preload cubemap PNGs: drei's texture path often does not match
+          the preload credentials mode → DevTools spam + wasted duplicate fetches.
+          Same for .glb / JSON — let Three/R3F own a single load path per URL.
         */}
         <link
           rel="preload"
