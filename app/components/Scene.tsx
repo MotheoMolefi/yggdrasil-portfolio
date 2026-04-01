@@ -1576,7 +1576,7 @@ const LOADING_PORTAL_BACK_LAYERS = [
 /** Slowly rotates the camera around Y for a drifting skybox effect. */
 function SkyboxDrift() {
   useFrame((state, delta) => {
-    state.camera.rotation.y += delta * 0.035
+    state.camera.rotation.y -= delta * 0.035
   })
   return null
 }
