@@ -1671,6 +1671,7 @@ export default function Scene() {
   const [progress, setProgress] = useState(0)
 
   const [showWelcome, setShowWelcome] = useState(true)
+  const [welcomeIntroReady, setWelcomeIntroReady] = useState(false)
   const [muted, setMuted] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -1894,12 +1895,13 @@ export default function Scene() {
     )
   }, [])
 
-  if (loadingState === 'loading' || KEEP_LOADING_SCREEN) {
-    return <LoadingScreen progress={progress} />
-  }
+  const showLoadingScreen =
+    loadingState === 'loading' || KEEP_LOADING_SCREEN || (showWelcome && !welcomeIntroReady)
 
   return (
-    <div className="w-full h-full relative bg-[#050510]">
+    <>
+      {loadingState === 'ready' && !KEEP_LOADING_SCREEN && (
+        <div className="w-full h-full relative bg-[#050510]">
       {/* ========== THREE.JS CANVAS (blurred during welcome — overlay + particles stay sharp) ========== */}
       <div
         className="absolute inset-0 overflow-hidden"
@@ -2064,10 +2066,13 @@ export default function Scene() {
         )
       })()}
 
-      {/* ========== WELCOME SCREEN ========== */}
-      {showWelcome && (
-        <WelcomeScreen onEnter={handleWelcomeDismiss} />
-      )}
+          {/* ========== WELCOME SCREEN ========== */}
+          {showWelcome && (
+            <WelcomeScreen
+              onEnter={handleWelcomeDismiss}
+              onIntroReady={() => setWelcomeIntroReady(true)}
+            />
+          )}
 
       {/* ========== RATATOSKR CHAT UI ========== */}
       <RatatoskrChat
@@ -2087,6 +2092,14 @@ export default function Scene() {
           visible={zoomReached}
         />
       )}
-    </div>
+        </div>
+      )}
+
+      {showLoadingScreen && (
+        <div className="fixed inset-0 z-[60] pointer-events-none">
+          <LoadingScreen progress={progress} />
+        </div>
+      )}
+    </>
   )
 }

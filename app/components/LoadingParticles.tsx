@@ -281,6 +281,7 @@ export default function LoadingParticles({
   appearance = 'dark',
   /** When set, used as WebGL clear (e.g. dark base under drei `Environment` background). */
   clearColorHex,
+  onReady,
 }: {
   transparentBackground?: boolean
   /** One or two lines of Norse particle text */
@@ -297,6 +298,7 @@ export default function LoadingParticles({
   cursorRepelHex?: string
   appearance?: LoadingParticlesAppearance
   clearColorHex?: number
+  onReady?: () => void
 }) {
   const { gl, scene, camera, invalidate } = useThree()
   const groupRef = useRef<THREE.Group | null>(null)
@@ -320,9 +322,13 @@ export default function LoadingParticles({
   appearanceRef.current = appearance
   const titleOffsetYPxRef = useRef(titleOffsetYPx)
   titleOffsetYPxRef.current = titleOffsetYPx
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
+  const didNotifyReadyRef = useRef(false)
 
   useEffect(() => {
     cancelledRef.current = false
+    didNotifyReadyRef.current = false
     const fontSize = Math.round(DEFAULT_FONT_SIZE * textScale)
     const targetScale = DEFAULT_TARGET_SCALE * textScale
     const lineGap = Math.max(2, Math.round(LINE_GAP_BASE * textScale))
@@ -471,6 +477,11 @@ export default function LoadingParticles({
         gpgpuRef.current = null
         meshRef.current = null
       }
+
+      if (!didNotifyReadyRef.current) {
+        didNotifyReadyRef.current = true
+        onReadyRef.current?.()
+      }
     }
 
     const loader = new FontLoader()
@@ -480,7 +491,7 @@ export default function LoadingParticles({
         if (cancelledRef.current) return
         hollowGlyphSetRef.current = getHollowGlyphSet(font)
         if (process.env.NODE_ENV === 'development') {
-          console.log('[LoadingParticles] Hollow glyphs (by outline):', Array.from(hollowGlyphSetRef.current).sort().join(''))
+          // Debug note removed: printing full glyph sets can emit noisy unreadable console output.
         }
         const mesh = makeTextMesh(font, lines, fontSize, targetScale, lineGap)
         const sampledData = makeSampledData(

@@ -8,6 +8,7 @@ import LoadingParticles, { PARTICLE_LINES_WELCOME } from './LoadingParticles'
 
 interface WelcomeScreenProps {
   onEnter: () => void
+  onIntroReady?: () => void
 }
 
 const CONTROLS = [
@@ -21,35 +22,28 @@ const CONTROLS = [
   { keys: ['Esc'], label: 'Close panels' },
 ]
 
-// Defer Canvas mount until container is in DOM so R3F connect() doesn't see null
-function useCanvasReady(visible: boolean) {
-  const [canvasReady, setCanvasReady] = useState(false)
-  useEffect(() => {
-    if (!visible) {
-      setCanvasReady(false)
-      return
-    }
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => setCanvasReady(true))
-    })
-    return () => cancelAnimationFrame(id)
-  }, [visible])
-  return canvasReady
-}
-
-export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onEnter, onIntroReady }: WelcomeScreenProps) {
   const norseReady = useNorseFontsReady()
   const [phase, setPhase]     = useState<'intro' | 'controls'>('intro')
   const [exiting, setExiting] = useState(false)
   const [visible, setVisible] = useState(true)
+  const [introParticlesReady, setIntroParticlesReady] = useState(false)
   const showIntroParticles = visible && phase === 'intro'
-  const canvasReady = useCanvasReady(showIntroParticles)
+  const showIntroUi = phase === 'intro' && introParticlesReady
 
   // Stable refs so event handlers always see latest values
   const phaseRef   = useRef(phase)
   const exitingRef = useRef(exiting)
   useEffect(() => { phaseRef.current = phase },   [phase])
   useEffect(() => { exitingRef.current = exiting }, [exiting])
+  useEffect(() => {
+    if (!showIntroParticles) {
+      setIntroParticlesReady(false)
+    }
+  }, [showIntroParticles])
+  useEffect(() => {
+    if (introParticlesReady) onIntroReady?.()
+  }, [introParticlesReady, onIntroReady])
 
   const goToControls = () => {
     if (phaseRef.current !== 'intro') return
@@ -94,7 +88,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
       />
 
       {/* Particles only on intro — omit entire layer on controls (z-[1] was painting above z-auto UI) */}
-      {showIntroParticles && canvasReady && (
+      {showIntroParticles && (
         <div className="absolute inset-0 z-[1] pointer-events-none" aria-hidden>
           <Canvas
             camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 10000 }}
@@ -114,6 +108,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
               textScale={0.50}
               titleOffsetYPx={0}
               cursorRepelHex={WELCOME_PARTICLE_CURSOR_ACCENT_HEX}
+              onReady={() => setIntroParticlesReady(true)}
             />
           </Canvas>
         </div>
@@ -123,8 +118,8 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
       <div
         className="absolute inset-0 z-[2] flex flex-col items-center justify-center pointer-events-none select-none"
         style={{
-          opacity:   phase === 'intro' ? 1 : 0,
-          transform: phase === 'intro' ? 'translateY(0px)' : 'translateY(-24px)',
+          opacity:   showIntroUi ? 1 : 0,
+          transform: showIntroUi ? 'translateY(0px)' : 'translateY(-24px)',
           transition: 'opacity 0.5s ease, transform 0.5s ease',
         }}
       >
@@ -143,7 +138,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
               fontSize: 'clamp(1.2rem, 3.65vw, 1.65rem)',
               color: 'rgba(248, 252, 255, 0.9)',
               letterSpacing: '0.12em',
-              opacity: norseReady ? 1 : 0,
+              opacity: norseReady && introParticlesReady ? 1 : 0,
               transition: 'opacity 0.35s ease',
             }}
           >
@@ -166,7 +161,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
       </div>
 
       {/* Invisible click-catcher for phase 1 */}
-      {phase === 'intro' && (
+      {phase === 'intro' && introParticlesReady && (
         <div className="absolute inset-0 z-[3] cursor-pointer" onClick={goToControls} />
       )}
 
