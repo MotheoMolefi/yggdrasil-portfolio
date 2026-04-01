@@ -1,14 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { WELCOME_PARTICLE_CURSOR_ACCENT_HEX } from '../lib/codrops/particleCursorColor'
+import { r3fCanvasPointerProps } from '../lib/r3fCanvasPointerProps'
 import { useNorseFontsReady } from '../hooks/useNorseFontsReady'
 import LoadingParticles, { PARTICLE_LINES_WELCOME } from './LoadingParticles'
 
 interface WelcomeScreenProps {
   onEnter: () => void
-  onIntroReady?: () => void
 }
 
 const CONTROLS = [
@@ -22,7 +22,7 @@ const CONTROLS = [
   { keys: ['Esc'], label: 'Close panels' },
 ]
 
-export default function WelcomeScreen({ onEnter, onIntroReady }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
   const norseReady = useNorseFontsReady()
   const [phase, setPhase]     = useState<'intro' | 'controls'>('intro')
   const [exiting, setExiting] = useState(false)
@@ -30,6 +30,7 @@ export default function WelcomeScreen({ onEnter, onIntroReady }: WelcomeScreenPr
   const [introParticlesReady, setIntroParticlesReady] = useState(false)
   const showIntroParticles = visible && phase === 'intro'
   const showIntroUi = phase === 'intro' && introParticlesReady
+  const r3fPointer = useMemo(() => r3fCanvasPointerProps(), [])
 
   // Stable refs so event handlers always see latest values
   const phaseRef   = useRef(phase)
@@ -41,10 +42,6 @@ export default function WelcomeScreen({ onEnter, onIntroReady }: WelcomeScreenPr
       setIntroParticlesReady(false)
     }
   }, [showIntroParticles])
-  useEffect(() => {
-    if (introParticlesReady) onIntroReady?.()
-  }, [introParticlesReady, onIntroReady])
-
   const goToControls = () => {
     if (phaseRef.current !== 'intro') return
     setPhase('controls')
@@ -91,6 +88,7 @@ export default function WelcomeScreen({ onEnter, onIntroReady }: WelcomeScreenPr
       {showIntroParticles && (
         <div className="absolute inset-0 z-[1] pointer-events-none" aria-hidden>
           <Canvas
+            {...r3fPointer}
             camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 10000 }}
             gl={{
               alpha: true,

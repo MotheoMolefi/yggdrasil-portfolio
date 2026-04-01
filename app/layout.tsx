@@ -1,5 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import {
+  PRELOAD_SCENE_GLBS,
+  PRELOAD_SKYBOX_IMAGES,
+  PRELOAD_WELCOME_FONT_JSON,
+} from './lib/criticalPreload'
 
 export const metadata: Metadata = {
   title: 'Yggdrasil Portfolio',
@@ -19,6 +24,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {PRELOAD_SKYBOX_IMAGES.map((href) => (
+          <link key={href} rel="preload" href={href} as="image" />
+        ))}
+        {/* Same-origin: omit crossOrigin so preload matches GLTFLoader / fetch (avoids DevTools credential-mode warnings). */}
+        {PRELOAD_SCENE_GLBS.map((href) => (
+          <link key={href} rel="preload" href={href} as="fetch" />
+        ))}
+        <link rel="preload" href={PRELOAD_WELCOME_FONT_JSON} as="fetch" />
         <link
           rel="preload"
           href="/fonts/Norse.otf"

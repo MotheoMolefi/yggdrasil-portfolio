@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber'
 import { useGLTF, Environment } from '@react-three/drei'
-import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from 'react'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
@@ -18,6 +18,8 @@ import ParticleLoadingBar from './ParticleLoadingBar'
 import { useNorseFontsReady } from '../hooks/useNorseFontsReady'
 import { projects } from '../data/projects'
 import { GALAXY_SKYBOX_FILES } from '../lib/galaxySkybox'
+import { PRELOAD_SCENE_GLBS } from '../lib/criticalPreload'
+import { r3fCanvasPointerProps } from '../lib/r3fCanvasPointerProps'
 import { presetsObj, type PresetsType } from '@react-three/drei/helpers/environment-assets'
 
 /** Same HDRI base URL as drei's `useEnvironment` preset loader (drei ~9.92). */
@@ -49,6 +51,7 @@ function WebglContextLossGuard() {
   const { gl } = useThree()
   useEffect(() => {
     const canvas = gl.domElement
+    if (!canvas) return
     const onLost = (e: Event) => {
       e.preventDefault()
       console.warn(
@@ -175,6 +178,7 @@ function CinematicCamera({
 
   useEffect(() => {
     const canvas = gl.domElement
+    if (!canvas) return
 
     // ========== KEYBOARD HANDLERS ==========
     // Ignore keys when Cmd/Ctrl is pressed (allows system shortcuts like screenshots)
@@ -276,7 +280,7 @@ function CinematicCamera({
       canvas.removeEventListener('wheel', handleWheel)
       if (delayTimerRef.current) clearTimeout(delayTimerRef.current)
     }
-  }, [gl, size, startupDelay, onInteract, onExit])
+  }, [gl, size, startupDelay, onInteract, onExit, locked])
 
   // Kill all momentum when unlocking
   const wasLocked = useRef(false)
@@ -671,6 +675,7 @@ function GuidedCamera({
     }
 
     const canvas = gl.domElement
+    if (!canvas) return
     canvas.addEventListener('wheel', handleWheel, { passive: false })
     window.addEventListener('keydown', handleKeys)
 
@@ -1568,8 +1573,34 @@ const LOADING_PORTAL_BACK_LAYERS = [
   { scale: 0.99, tx: 1, ty: 2, opacity: 0.3, color: 'rgba(235, 242, 255, 0.96)' },
 ] as const
 
+/** Slowly rotates the camera around Y for a drifting skybox effect. */
+function SkyboxDrift() {
+  useFrame((state, delta) => {
+    state.camera.rotation.y += delta * 0.035
+  })
+  return null
+}
+
+/** Signals when the <Environment> textures have finished loading. */
+function EnvironmentReadySignal({ onReady }: { onReady: () => void }) {
+  const readyRef = useRef(false)
+  const { scene } = useThree()
+  useFrame(() => {
+    if (readyRef.current) return
+    if (scene.background) {
+      readyRef.current = true
+      onReady()
+    }
+  })
+  return null
+}
+
 function LoadingScreen({ progress }: { progress: number }) {
   const norseReady = useNorseFontsReady()
+  const [skyboxReady, setSkyboxReady] = useState(false)
+  const r3fPointer = useMemo(() => r3fCanvasPointerProps(), [])
+  const handleSkyboxReady = useCallback(() => setSkyboxReady(true), [])
+  const uiVisible = norseReady && skyboxReady
   const titleTypography = {
     fontFamily: "'Norse', system-ui, sans-serif",
     fontWeight: 'bold' as const,
@@ -1580,27 +1611,25 @@ function LoadingScreen({ progress }: { progress: number }) {
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#03040a]">
       <Canvas
+        {...r3fPointer}
         className="absolute inset-0 block h-full w-full touch-none"
         camera={{ position: [0, 0, 800], fov: 60, near: 0.1, far: 15000 }}
         dpr={[1, 1.25]}
-        gl={{
-          antialias: false,
-          alpha: false,
-          powerPreference: 'default',
-          stencil: false,
-        }}
+        gl={{ antialias: false, alpha: false, powerPreference: 'default', stencil: false }}
         frameloop="always"
       >
         <Suspense fallback={null}>
-          <Environment files={[...GALAXY_SKYBOX_FILES]} background resolution={128} />
+          <Environment files={[...GALAXY_SKYBOX_FILES]} background resolution={96} />
         </Suspense>
+        <EnvironmentReadySignal onReady={handleSkyboxReady} />
+        <SkyboxDrift />
       </Canvas>
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4 sm:px-6">
         <div
           className="loading-portal-title-wrap relative inline-grid place-items-center"
           style={{
-            opacity: norseReady ? 1 : 0,
-            transition: 'opacity 0.35s ease',
+            opacity: uiVisible ? 1 : 0,
+            transition: 'opacity 0.5s ease',
           }}
         >
           {LOADING_PORTAL_BACK_LAYERS.map((layer, i) => (
@@ -1650,7 +1679,10 @@ function LoadingScreen({ progress }: { progress: number }) {
           }
         }
       `}</style>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-6 pb-16">
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-6 pb-16"
+        style={{ opacity: uiVisible ? 1 : 0, transition: 'opacity 0.5s ease' }}
+      >
         <ParticleLoadingBar progress={progress} variant="dark" />
       </div>
     </div>
@@ -1663,17 +1695,16 @@ function LoadingScreen({ progress }: { progress: number }) {
 // Set to true to keep the loading screen visible (for testing). Set to false for normal flow.
 const KEEP_LOADING_SCREEN = false
 
-/** Minimum time on the loader after critical assets resolve (ms). */
-const LOADING_SOFT_FLOOR_MS = 3500
-
 export default function Scene() {
   const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading')
   const [progress, setProgress] = useState(0)
 
   const [showWelcome, setShowWelcome] = useState(true)
-  const [welcomeIntroReady, setWelcomeIntroReady] = useState(false)
+  // Cinematic dip-to-black transition: loading → black → welcome+world
+  const [dipPhase, setDipPhase] = useState<'none' | 'fadeToBlack' | 'holdBlack' | 'fadeFromBlack' | 'done'>('none')
   const [muted, setMuted] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const r3fPointer = useMemo(() => r3fCanvasPointerProps(), [])
 
   useEffect(() => {
     const audio = new Audio('/miserere.mp3')
@@ -1845,14 +1876,9 @@ export default function Scene() {
   }, [isLocked, showWelcome])
 
   // Pre-load: gate on tree models only (largest scene requirement). Ratatoskr + cloud warm in parallel.
-  // Soft floor: after assets are ready, stay on the loader until LOADING_SOFT_FLOOR_MS from start (if any time left).
   useEffect(() => {
     const loader = new GLTFLoader()
-    const loadStartedAt = Date.now()
-    const criticalUrls = [
-      '/Yggdrasil_Tree_GoodBake1.glb',
-      '/Yggdrasil_Tree_MetallicLook.glb',
-    ] as const
+    const criticalUrls = PRELOAD_SCENE_GLBS
     let criticalLoaded = 0
 
     const onCriticalLoaded = () => {
@@ -1860,9 +1886,7 @@ export default function Scene() {
       setProgress(Math.min(99, (criticalLoaded / criticalUrls.length) * 100))
       if (criticalLoaded === criticalUrls.length) {
         setProgress(100)
-        const elapsed = Date.now() - loadStartedAt
-        const remaining = Math.max(0, LOADING_SOFT_FLOOR_MS - elapsed)
-        setTimeout(() => setLoadingState('ready'), remaining + 150)
+        setLoadingState('ready')
       }
     }
 
@@ -1895,83 +1919,124 @@ export default function Scene() {
     )
   }, [])
 
-  const showLoadingScreen =
-    loadingState === 'loading' || KEEP_LOADING_SCREEN || (showWelcome && !welcomeIntroReady)
+  const assetsReady = loadingState === 'ready' && !KEEP_LOADING_SCREEN
+
+  // Dip-to-black: purely timeout-driven (onTransitionEnd is unreliable across browsers)
+  //   none → fadeToBlack (opacity 0→1, 700ms) → holdBlack (150ms) → fadeFromBlack (opacity 1→0, 900ms) → done
+  const DIP_FADE_IN_MS  = 700
+  const DIP_HOLD_MS     = 150
+  const DIP_FADE_OUT_MS = 900
+
+  useEffect(() => {
+    if (!assetsReady || dipPhase !== 'none') return
+    // Mount curtain at opacity 0, then kick off fadeToBlack on the next frame
+    setDipPhase('fadeToBlack')
+  }, [assetsReady, dipPhase])
+
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>
+    switch (dipPhase) {
+      case 'fadeToBlack':
+        timeout = setTimeout(() => setDipPhase('holdBlack'), DIP_FADE_IN_MS + 50)
+        break
+      case 'holdBlack':
+        timeout = setTimeout(() => setDipPhase('fadeFromBlack'), DIP_HOLD_MS)
+        break
+      case 'fadeFromBlack':
+        timeout = setTimeout(() => setDipPhase('done'), DIP_FADE_OUT_MS + 50)
+        break
+    }
+    return () => clearTimeout(timeout!)
+  }, [dipPhase])
+
+  const showLoader = !assetsReady || dipPhase === 'fadeToBlack' || dipPhase === 'none'
+  const showWorld = dipPhase === 'holdBlack' || dipPhase === 'fadeFromBlack' || dipPhase === 'done'
+  const showCurtain = dipPhase !== 'none' && dipPhase !== 'done'
 
   return (
-    <>
-      {loadingState === 'ready' && !KEEP_LOADING_SCREEN && (
-        <div className="w-full h-full relative bg-[#050510]">
-      {/* ========== THREE.JS CANVAS (blurred during welcome — overlay + particles stay sharp) ========== */}
-      <div
-        className="absolute inset-0 overflow-hidden"
-        style={{
-          filter: showWelcome
-            ? 'blur(14px) brightness(0.34) saturate(0.28)'
-            : 'blur(0px) brightness(1) saturate(1)',
-          transform: showWelcome ? 'scale(1.04)' : 'scale(1)',
-          transition: 'filter 0.85s cubic-bezier(0.4, 0, 0.2, 1), transform 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
-          willChange: showWelcome ? 'filter, transform' : 'auto',
-        }}
-      >
-        <Canvas
-          className="block h-full w-full touch-none"
-          shadows
-          dpr={[1, 1.5]}
-          camera={{ position: OVERVIEW_CAMERA_POSITION, fov: 52, near: 0.1, far: 20000 }}
-          gl={{
-            antialias: true,
-            outputColorSpace: THREE.SRGBColorSpace,
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.08,
-            powerPreference: 'default',
+    <div className="w-full h-full relative bg-[#000000]">
+      {/* ========== LOADING SCREEN (behind curtain) ========== */}
+      {showLoader && (
+        <div className="absolute inset-0 z-0">
+          <LoadingScreen progress={progress} />
+        </div>
+      )}
+
+      {/* ========== MAIN SCENE + WELCOME (mounts behind curtain at holdBlack) ========== */}
+      {showWorld && (
+        <div className="absolute inset-0 z-10">
+          {/* ========== THREE.JS CANVAS (blurred during welcome) ========== */}
+          <div
+            className="absolute inset-0 overflow-hidden"
+            style={{
+              filter: showWelcome
+                ? 'blur(14px) brightness(0.34) saturate(0.28)'
+                : 'blur(0px) brightness(1) saturate(1)',
+              transform: showWelcome ? 'scale(1.04)' : 'scale(1)',
+              transition: 'filter 0.85s cubic-bezier(0.4, 0, 0.2, 1), transform 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
+              willChange: showWelcome ? 'filter, transform' : 'auto',
+            }}
+          >
+            <Canvas
+              {...r3fPointer}
+              className="block h-full w-full touch-none"
+              shadows
+              dpr={[1, 1.5]}
+              camera={{ position: OVERVIEW_CAMERA_POSITION, fov: 52, near: 0.1, far: 20000 }}
+              gl={{
+                antialias: true,
+                outputColorSpace: THREE.SRGBColorSpace,
+                toneMapping: THREE.ACESFilmicToneMapping,
+                toneMappingExposure: 1.08,
+                powerPreference: 'default',
+              }}
+            >
+              <WebglContextLossGuard />
+              <World
+                activeProjectId={activeProjectId}
+                viewingProjectId={viewingProjectId}
+                zoomReached={zoomReached}
+                isLocked={isLocked}
+                zoomTarget={zoomTarget}
+                onActiveChange={handleActiveChange}
+                onInteract={handleInteract}
+                onExit={handleExit}
+                onZoomComplete={handleZoomComplete}
+                themePreset={themePreset}
+                cameraMode={cameraMode}
+                onScrollProgress={handleScrollProgress}
+                onGuidedReady={handleGuidedReady}
+                onCinematicComplete={handleCinematicComplete}
+                chatOpen={showRatatoskr}
+                disableLook={chatHovered}
+                responseCount={ratatoskrResponseCount}
+              />
+            </Canvas>
+          </div>
+
+      {/* Cool wash over blurred scene during welcome */}
+      {showWelcome && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(ellipse 78% 64% at 50% 50%, rgba(92, 148, 255, 0.18) 0%, rgba(58, 108, 220, 0.16) 36%, rgba(18, 44, 128, 0.24) 100%)',
+            mixBlendMode: 'screen',
           }}
-        >
-          <WebglContextLossGuard />
-          <World
-            activeProjectId={activeProjectId}
-            viewingProjectId={viewingProjectId}
-            zoomReached={zoomReached}
-            isLocked={isLocked}
-            zoomTarget={zoomTarget}
-            onActiveChange={handleActiveChange}
-            onInteract={handleInteract}
-            onExit={handleExit}
-            onZoomComplete={handleZoomComplete}
-            themePreset={themePreset}
-            cameraMode={cameraMode}
-            onScrollProgress={handleScrollProgress}
-            onGuidedReady={handleGuidedReady}
-            onCinematicComplete={handleCinematicComplete}
-            chatOpen={showRatatoskr}
-            disableLook={chatHovered}
-            responseCount={ratatoskrResponseCount}
-          />
-        </Canvas>
-      </div>
-      {/* Cool wash over blurred scene so warm/yellow highlights don't leak through welcome transition */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          opacity: showWelcome ? 1 : 0,
-          background:
-            'radial-gradient(ellipse 78% 64% at 50% 50%, rgba(92, 148, 255, 0.18) 0%, rgba(58, 108, 220, 0.16) 36%, rgba(18, 44, 128, 0.24) 100%)',
-          mixBlendMode: 'screen',
-          transition: 'opacity 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      />
+        />
+      )}
+
+      {/* ========== WELCOME SCREEN ========== */}
+      {showWelcome && (
+        <WelcomeScreen onEnter={handleWelcomeDismiss} />
+      )}
 
       {/* ========== GUIDED TOUR: SCROLL PROGRESS + HINT ========== */}
-      {cameraMode === 'guided' && !zoomReached && !showRatatoskr && (
+      {!showWelcome && cameraMode === 'guided' && !zoomReached && !showRatatoskr && (
         <>
-          {/* Scroll progress bar — right edge */}
           <div
             className="fixed right-3 z-30 pointer-events-none"
-            style={{
-              top: '50%',
-              transform: 'translateY(-50%)',
-              height: '80vh',
-            }}
+            style={{ top: '50%', transform: 'translateY(-50%)', height: '80vh' }}
           >
             <div className="relative w-[24px] h-full rounded-full overflow-hidden"
               style={{ background: 'rgba(255, 255, 255, 0.08)' }}
@@ -1987,13 +2052,9 @@ export default function Scene() {
             </div>
           </div>
 
-          {/* Scroll hint text — uses theme palette */}
           <div
             className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none select-none"
-            style={{
-              opacity: showScrollHint ? 1 : 0,
-              transition: 'opacity 1.2s ease',
-            }}
+            style={{ opacity: showScrollHint ? 1 : 0, transition: 'opacity 1.2s ease' }}
           >
             <div
               className="text-center rounded-md"
@@ -2004,12 +2065,12 @@ export default function Scene() {
                 padding: '0.4em 0.6em',
               }}
             >
-            <p
-              className="text-2xl tracking-[0.35em] uppercase font-bold"
-              style={{ color: THEME_UI_PALETTE[themePreset].textPrimary }}
-            >
-              Scroll to navigate
-            </p>
+              <p
+                className="text-2xl tracking-[0.35em] uppercase font-bold"
+                style={{ color: THEME_UI_PALETTE[themePreset].textPrimary }}
+              >
+                Scroll to navigate
+              </p>
             </div>
           </div>
 
@@ -2023,15 +2084,12 @@ export default function Scene() {
       )}
 
       {/* ========== CONTROL PANEL ========== */}
-      {!zoomReached && !isFullscreen && !showWelcome && (() => {
+      {!showWelcome && !zoomReached && !isFullscreen && (() => {
         const p = THEME_UI_PALETTE[themePreset]
         return (
           <div
             className="fixed bottom-6 right-12 z-40 flex flex-col gap-2 p-3 rounded-xl"
-            style={{
-              background: p.panelBg,
-              border: p.panelBorder,
-            }}
+            style={{ background: p.panelBg, border: p.panelBorder }}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] uppercase tracking-widest" style={{ color: p.textPrimary }}>
@@ -2066,24 +2124,18 @@ export default function Scene() {
         )
       })()}
 
-          {/* ========== WELCOME SCREEN ========== */}
-          {showWelcome && (
-            <WelcomeScreen
-              onEnter={handleWelcomeDismiss}
-              onIntroReady={() => setWelcomeIntroReady(true)}
-            />
-          )}
-
       {/* ========== RATATOSKR CHAT UI ========== */}
-      <RatatoskrChat
-        open={showRatatoskr}
-        onClose={() => setShowRatatoskr(false)}
-        onMouseEnter={() => setChatHovered(true)}
-        onMouseLeave={() => setChatHovered(false)}
-        onAssistantResponse={() => setRatatoskrResponseCount((c) => c + 1)}
-        onNavigate={handleRatatoskrNavigate}
-        themePalette={THEME_UI_PALETTE[themePreset]}
-      />
+      {!showWelcome && (
+        <RatatoskrChat
+          open={showRatatoskr}
+          onClose={() => setShowRatatoskr(false)}
+          onMouseEnter={() => setChatHovered(true)}
+          onMouseLeave={() => setChatHovered(false)}
+          onAssistantResponse={() => setRatatoskrResponseCount((c) => c + 1)}
+          onNavigate={handleRatatoskrNavigate}
+          themePalette={THEME_UI_PALETTE[themePreset]}
+        />
+      )}
 
       {/* ========== PROJECT INFO PANEL ========== */}
       {zoomReached && viewingProject && (
@@ -2095,11 +2147,28 @@ export default function Scene() {
         </div>
       )}
 
-      {showLoadingScreen && (
-        <div className="fixed inset-0 z-[60] pointer-events-none">
-          <LoadingScreen progress={progress} />
-        </div>
+      {/* ========== DIP-TO-BLACK CURTAIN ========== */}
+      {showCurtain && (
+        <>
+          <div
+            className="absolute inset-0 z-50 pointer-events-none"
+            style={{
+              backgroundColor: '#000000',
+              animation:
+                dipPhase === 'fadeToBlack'
+                  ? `dipFadeIn ${DIP_FADE_IN_MS}ms ease-in forwards`
+                  : dipPhase === 'fadeFromBlack'
+                    ? `dipFadeOut ${DIP_FADE_OUT_MS}ms ease-out forwards`
+                    : 'none',
+              opacity: dipPhase === 'holdBlack' ? 1 : undefined,
+            }}
+          />
+          <style>{`
+            @keyframes dipFadeIn  { from { opacity: 0 } to { opacity: 1 } }
+            @keyframes dipFadeOut { from { opacity: 1 } to { opacity: 0 } }
+          `}</style>
+        </>
       )}
-    </>
+    </div>
   )
 }
