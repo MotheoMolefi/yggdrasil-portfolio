@@ -9,6 +9,7 @@ import LoadingParticles, { PARTICLE_LINES_WELCOME } from './LoadingParticles'
 
 interface WelcomeScreenProps {
   onEnter: () => void
+  onReady?: () => void
 }
 
 const CONTROLS = [
@@ -22,7 +23,7 @@ const CONTROLS = [
   { keys: ['Esc'], label: 'Close panels' },
 ]
 
-export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onEnter, onReady }: WelcomeScreenProps) {
   const norseReady = useNorseFontsReady()
   const [phase, setPhase]     = useState<'intro' | 'controls'>('intro')
   const [exiting, setExiting] = useState(false)
@@ -42,6 +43,9 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
       setIntroParticlesReady(false)
     }
   }, [showIntroParticles])
+  useEffect(() => {
+    if (introParticlesReady) onReady?.()
+  }, [introParticlesReady, onReady])
   const goToControls = () => {
     if (phaseRef.current !== 'intro') return
     setPhase('controls')

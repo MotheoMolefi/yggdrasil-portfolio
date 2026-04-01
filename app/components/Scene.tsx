@@ -1595,6 +1595,7 @@ function EnvironmentReadySignal({ onReady }: { onReady: () => void }) {
   return null
 }
 
+
 function LoadingScreen({ progress }: { progress: number }) {
   const norseReady = useNorseFontsReady()
   const [skyboxReady, setSkyboxReady] = useState(false)
@@ -1702,6 +1703,8 @@ export default function Scene() {
   const [showWelcome, setShowWelcome] = useState(true)
   // Cinematic dip-to-black transition: loading → black → welcome+world
   const [dipPhase, setDipPhase] = useState<'none' | 'fadeToBlack' | 'holdBlack' | 'fadeFromBlack' | 'done'>('none')
+  const [welcomeReady, setWelcomeReady] = useState(false)
+  const handleWelcomeReady = useCallback(() => setWelcomeReady(true), [])
   const [muted, setMuted] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const r3fPointer = useMemo(() => r3fCanvasPointerProps(), [])
@@ -1940,6 +1943,7 @@ export default function Scene() {
         timeout = setTimeout(() => setDipPhase('holdBlack'), DIP_FADE_IN_MS + 50)
         break
       case 'holdBlack':
+        if (!welcomeReady) return
         timeout = setTimeout(() => setDipPhase('fadeFromBlack'), DIP_HOLD_MS)
         break
       case 'fadeFromBlack':
@@ -1947,7 +1951,7 @@ export default function Scene() {
         break
     }
     return () => clearTimeout(timeout!)
-  }, [dipPhase])
+  }, [dipPhase, welcomeReady])
 
   const showLoader = !assetsReady || dipPhase === 'fadeToBlack' || dipPhase === 'none'
   const showWorld = dipPhase === 'holdBlack' || dipPhase === 'fadeFromBlack' || dipPhase === 'done'
@@ -2028,7 +2032,7 @@ export default function Scene() {
 
       {/* ========== WELCOME SCREEN ========== */}
       {showWelcome && (
-        <WelcomeScreen onEnter={handleWelcomeDismiss} />
+        <WelcomeScreen onEnter={handleWelcomeDismiss} onReady={handleWelcomeReady} />
       )}
 
       {/* ========== GUIDED TOUR: SCROLL PROGRESS + HINT ========== */}
