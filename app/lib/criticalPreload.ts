@@ -9,5 +9,5 @@ export const PRELOAD_SCENE_GLBS = [
   '/Yggdrasil_Tree_MetallicLook.glb',
 ] as const
 
-/** Welcome particle title — `LoadingParticles` FontLoader. */
+/** Welcome particle font — loaded only by `FontLoader` in `LoadingParticles` (no `<link rel=preload as=fetch>`; see layout comment). */
 export const PRELOAD_WELCOME_FONT_JSON = '/norse_font/Norsebold.json'

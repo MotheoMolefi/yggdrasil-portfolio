@@ -2,7 +2,9 @@
 
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber'
 import { useGLTF, Environment } from '@react-three/drei'
-import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense, Fragment } from 'react'
+import { createPortal } from 'react-dom'
+import type { CSSProperties } from 'react'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
@@ -1956,8 +1958,44 @@ export default function Scene() {
   const showLoader = !assetsReady || dipPhase === 'fadeToBlack' || dipPhase === 'none'
   const showWorld = dipPhase === 'holdBlack' || dipPhase === 'fadeFromBlack' || dipPhase === 'done'
 
+  const [curtainPortalReady, setCurtainPortalReady] = useState(false)
+  useEffect(() => {
+    setCurtainPortalReady(true)
+  }, [])
+
+  const curtainStyle: CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 2147483646,
+    backgroundColor: '#000000',
+    pointerEvents: 'none',
+    // After dip completes, hide so a transparent layer never sits above the page.
+    visibility: dipPhase === 'done' ? 'hidden' : 'visible',
+  }
+  if (dipPhase === 'none') {
+    curtainStyle.opacity = 0
+    curtainStyle.animation = 'none'
+  } else if (dipPhase === 'fadeToBlack') {
+    curtainStyle.opacity = 0
+    curtainStyle.animation = `sceneDipFadeIn ${DIP_FADE_IN_MS}ms ease-in forwards`
+  } else if (dipPhase === 'holdBlack') {
+    curtainStyle.opacity = 1
+    curtainStyle.animation = 'none'
+  } else if (dipPhase === 'fadeFromBlack') {
+    // Keep opacity:1 explicitly — do not omit it here or React drops the property
+    // for one frame before @keyframes apply (navy / canvas flash).
+    curtainStyle.opacity = 1
+    curtainStyle.animation = `sceneDipFadeOut ${DIP_FADE_OUT_MS}ms ease-out forwards`
+  } else {
+    curtainStyle.opacity = 0
+    curtainStyle.animation = 'none'
+  }
+
   return (
-    <div className="w-full h-full relative bg-[#000000]">
+    <Fragment>
+    <div className="w-full h-full relative bg-black">
       {/* ========== LOADING SCREEN (behind curtain) ========== */}
       {showLoader && (
         <div className="absolute inset-0 z-0">
@@ -2149,32 +2187,9 @@ export default function Scene() {
       )}
         </div>
       )}
-
-      {/* ========== DIP-TO-BLACK CURTAIN ==========
-          Always in the DOM. Fixed + z-[9999] so no stacking context can paint over it.
-          opacity:0 when idle/done so it's invisible but never unmounted mid-dip. */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          zIndex: 9999,
-          backgroundColor: '#000000',
-          opacity:
-            dipPhase === 'none' || dipPhase === 'done' ? 0
-            : dipPhase === 'holdBlack' ? 1
-            : undefined,
-          animation:
-            dipPhase === 'fadeToBlack'
-              ? `dipFadeIn ${DIP_FADE_IN_MS}ms ease-in forwards`
-              : dipPhase === 'fadeFromBlack'
-                ? `dipFadeOut ${DIP_FADE_OUT_MS}ms ease-out forwards`
-                : 'none',
-          // No transition — only animations. Transition would fight the animation.
-        }}
-      />
-      <style>{`
-        @keyframes dipFadeIn  { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes dipFadeOut { from { opacity: 1 } to { opacity: 0 } }
-      `}</style>
     </div>
+    {curtainPortalReady &&
+      createPortal(<div aria-hidden style={curtainStyle} />, document.body)}
+    </Fragment>
   )
 }

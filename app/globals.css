@@ -27,10 +27,31 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #050510;
+  /* Must stay black: loading curtain gaps / WebGL clear flash read as navy if this is #050510 */
+  background: #000000;
 }
 
 #__next {
   width: 100%;
   height: 100%;
+  min-height: 100%;
+  background: #000000;
+}
+
+/* Loading dip — used by Scene curtain portaled to document.body */
+@keyframes sceneDipFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sceneDipFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }

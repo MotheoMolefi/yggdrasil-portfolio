@@ -1,10 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import {
-  PRELOAD_SCENE_GLBS,
-  PRELOAD_SKYBOX_IMAGES,
-  PRELOAD_WELCOME_FONT_JSON,
-} from './lib/criticalPreload'
+import { PRELOAD_SKYBOX_IMAGES } from './lib/criticalPreload'
 
 export const metadata: Metadata = {
   title: 'Yggdrasil Portfolio',
@@ -27,11 +23,13 @@ export default function RootLayout({
         {PRELOAD_SKYBOX_IMAGES.map((href) => (
           <link key={href} rel="preload" href={href} as="image" />
         ))}
-        {/* Same-origin: omit crossOrigin so preload matches GLTFLoader / fetch (avoids DevTools credential-mode warnings). */}
-        {PRELOAD_SCENE_GLBS.map((href) => (
-          <link key={href} rel="preload" href={href} as="fetch" />
-        ))}
-        <link rel="preload" href={PRELOAD_WELCOME_FONT_JSON} as="fetch" />
+        {/*
+          Do NOT link-preload .glb / norse JSON as fetch. Chrome pairs that cache entry
+          with a different credential partition than GLTFLoader/FileLoader (XHR), which
+          triggers "credentials mode does not match", unused preload spam, and in
+          Incognito can surface ERR_CACHE_WRITE_FAILURE — breaking both preload and load.
+          Let Three loaders own those URLs as the single fetch path.
+        */}
         <link
           rel="preload"
           href="/fonts/Norse.otf"
@@ -47,7 +45,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="w-screen h-screen overflow-hidden bg-[#050510]">{children}</body>
+      <body className="w-screen h-screen overflow-hidden bg-black">{children}</body>
     </html>
   )
 }
