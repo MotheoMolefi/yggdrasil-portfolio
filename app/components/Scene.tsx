@@ -160,6 +160,16 @@ function CinematicCamera({
   const ratTargetPos = useRef(new THREE.Vector3())
 
   useEffect(() => {
+    // Ratatoskr → project: we mount with `locked` + zoomTarget while still at the perch.
+    // Do not run the guided→free intro lerp to FREE_ROAM_START first.
+    if (locked) {
+      introLerping.current = false
+      camera.rotation.order = 'YXZ'
+      const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
+      currentYaw.current = e.y
+      currentPitch.current = e.x
+      return
+    }
     const dist = camera.position.distanceTo(FREE_ROAM_START)
     if (dist > 50) {
       introStartPos.current.copy(camera.position)
@@ -365,14 +375,9 @@ function CinematicCamera({
       }
 
       const ZOOM_SPEED = 0.0046
-      const VIEW_DISTANCE = 150
 
-      // Compute the "viewing" position: offset from orb, facing it
       const orbPos = new THREE.Vector3(...zoomTarget)
-      const dirToOrb = orbPos.clone().sub(savedPosition.current).normalize()
-      const viewPos = orbPos.clone().sub(dirToOrb.multiplyScalar(VIEW_DISTANCE))
-
-      // Compute look-at yaw/pitch toward the orb
+      const viewPos = getOrbInspectionView(zoomTarget).position
       const lookDir = orbPos.clone().sub(viewPos).normalize()
       const targetYaw = Math.atan2(-lookDir.x, -lookDir.z)
       const targetPitch = Math.asin(lookDir.y)
@@ -416,9 +421,7 @@ function CinematicCamera({
 
       if (zoomTarget) {
         const orbPos = new THREE.Vector3(...zoomTarget)
-        const dirToOrb = orbPos.clone().sub(savedPosition.current).normalize()
-        const viewPos = orbPos.clone().sub(dirToOrb.multiplyScalar(150))
-
+        const viewPos = getOrbInspectionView(zoomTarget).position
         const lookDir = orbPos.clone().sub(viewPos).normalize()
         const targetYaw = Math.atan2(-lookDir.x, -lookDir.z)
         const targetPitch = Math.asin(lookDir.y)
@@ -555,6 +558,18 @@ function CinematicCamera({
 const OVERVIEW_CAMERA_POSITION: [number, number, number] = [0, 1500, 4100]
 const OVERVIEW_CAMERA_LOOK_AT = new THREE.Vector3(0, 1800, 0)
 
+/**
+ * Camera pose for inspecting a project orb — same math as guided tour stops and zoom fly-in/out
+ * (free roam + guided). Do not duplicate the 200 / +40 offset elsewhere.
+ */
+function getOrbInspectionView(orbWorldPosition: readonly [number, number, number]) {
+  const orbPos = new THREE.Vector3(...orbWorldPosition)
+  const dirXZ = new THREE.Vector3(orbPos.x, 0, orbPos.z).normalize()
+  const camPos = orbPos.clone().add(dirXZ.multiplyScalar(200))
+  camPos.y = orbPos.y + 40
+  return { position: camPos, lookAt: orbPos.clone() }
+}
+
 const GUIDED_WAYPOINTS = (() => {
   const overview = {
     position: new THREE.Vector3(...OVERVIEW_CAMERA_POSITION),
@@ -563,13 +578,10 @@ const GUIDED_WAYPOINTS = (() => {
   }
 
   const orbStops = projects.map((p) => {
-    const orbPos = new THREE.Vector3(...p.position)
-    const dirXZ = new THREE.Vector3(orbPos.x, 0, orbPos.z).normalize()
-    const camPos = orbPos.clone().add(dirXZ.multiplyScalar(200))
-    camPos.y = orbPos.y + 40
+    const { position, lookAt } = getOrbInspectionView(p.position)
     return {
-      position: camPos,
-      lookAt: orbPos.clone(),
+      position,
+      lookAt,
       projectId: p.id,
     }
   })
@@ -705,10 +717,8 @@ function GuidedCamera({
       }
 
       const ZOOM_SPEED = 0.0046
-      const VIEW_DISTANCE = 150
       const orbPos = new THREE.Vector3(...zoomTarget)
-      const dirToOrb = orbPos.clone().sub(savedPosition.current).normalize()
-      const viewPos = orbPos.clone().sub(dirToOrb.multiplyScalar(VIEW_DISTANCE))
+      const viewPos = getOrbInspectionView(zoomTarget).position
 
       if (isZooming.current === 'in') {
         zoomProgress.current = Math.min(1, zoomProgress.current + ZOOM_SPEED)
@@ -740,10 +750,8 @@ function GuidedCamera({
       const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
 
       if (zoomTarget) {
-        const VIEW_DISTANCE = 150
         const orbPos = new THREE.Vector3(...zoomTarget)
-        const dirToOrb = orbPos.clone().sub(savedPosition.current).normalize()
-        const viewPos = orbPos.clone().sub(dirToOrb.multiplyScalar(VIEW_DISTANCE))
+        const viewPos = getOrbInspectionView(zoomTarget).position
 
         camera.position.lerpVectors(savedPosition.current, viewPos, ease)
         const currentLook = new THREE.Vector3().lerpVectors(savedLookAt.current, orbPos, ease)
@@ -1556,10 +1564,11 @@ const THEME_UI_PALETTE: Record<PresetsType, ThemeUIPalette> = {
   },
 }
 
-const RATATOSKR_NAVIGATE_MAP: Record<string, { id: string; position: [number, number, number] }> = {
-  nazarite:  { id: 'project-1', position: [600,  1800,  200] },
-  tictactoe: { id: 'project-3', position: [400,  2600, -400] },
-  mashonisa: { id: 'project-2', position: [-500, 2200, -300] },
+/** Assistant slug → project id (`position` always from `projects` data). */
+const RATATOSKR_NAVIGATE_MAP: Record<string, string> = {
+  nazarite: 'project-1',
+  tictactoe: 'project-3',
+  mashonisa: 'project-2',
 }
 
 // ============================================================================
@@ -1850,14 +1859,14 @@ export default function Scene() {
   }, [])
 
   const handleRatatoskrNavigate = useCallback((key: string) => {
-    console.log('[Ratatoskr] navigate called with key:', key)
-    const target = RATATOSKR_NAVIGATE_MAP[key]
-    if (!target) {
-      console.warn('[Ratatoskr] no target found for key:', key)
+    const id = RATATOSKR_NAVIGATE_MAP[key]
+    const project = id ? projects.find((p) => p.id === id) : undefined
+    if (!project) {
+      console.warn('[Ratatoskr] no project for key:', key)
       return
     }
-    lastZoomTarget.current = target.position
-    setViewingProjectId(target.id)
+    lastZoomTarget.current = project.position
+    setViewingProjectId(project.id)
     setZoomReached(false)
     setShowRatatoskr(false)
     setCameraMode('freeRoam')
