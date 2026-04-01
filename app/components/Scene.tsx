@@ -1955,7 +1955,6 @@ export default function Scene() {
 
   const showLoader = !assetsReady || dipPhase === 'fadeToBlack' || dipPhase === 'none'
   const showWorld = dipPhase === 'holdBlack' || dipPhase === 'fadeFromBlack' || dipPhase === 'done'
-  const showCurtain = dipPhase !== 'none' && dipPhase !== 'done'
 
   return (
     <div className="w-full h-full relative bg-[#000000]">
@@ -2151,28 +2150,31 @@ export default function Scene() {
         </div>
       )}
 
-      {/* ========== DIP-TO-BLACK CURTAIN ========== */}
-      {showCurtain && (
-        <>
-          <div
-            className="absolute inset-0 z-50 pointer-events-none"
-            style={{
-              backgroundColor: '#000000',
-              animation:
-                dipPhase === 'fadeToBlack'
-                  ? `dipFadeIn ${DIP_FADE_IN_MS}ms ease-in forwards`
-                  : dipPhase === 'fadeFromBlack'
-                    ? `dipFadeOut ${DIP_FADE_OUT_MS}ms ease-out forwards`
-                    : 'none',
-              opacity: dipPhase === 'holdBlack' ? 1 : undefined,
-            }}
-          />
-          <style>{`
-            @keyframes dipFadeIn  { from { opacity: 0 } to { opacity: 1 } }
-            @keyframes dipFadeOut { from { opacity: 1 } to { opacity: 0 } }
-          `}</style>
-        </>
-      )}
+      {/* ========== DIP-TO-BLACK CURTAIN ==========
+          Always in the DOM. Fixed + z-[9999] so no stacking context can paint over it.
+          opacity:0 when idle/done so it's invisible but never unmounted mid-dip. */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 9999,
+          backgroundColor: '#000000',
+          opacity:
+            dipPhase === 'none' || dipPhase === 'done' ? 0
+            : dipPhase === 'holdBlack' ? 1
+            : undefined,
+          animation:
+            dipPhase === 'fadeToBlack'
+              ? `dipFadeIn ${DIP_FADE_IN_MS}ms ease-in forwards`
+              : dipPhase === 'fadeFromBlack'
+                ? `dipFadeOut ${DIP_FADE_OUT_MS}ms ease-out forwards`
+                : 'none',
+          // No transition — only animations. Transition would fight the animation.
+        }}
+      />
+      <style>{`
+        @keyframes dipFadeIn  { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes dipFadeOut { from { opacity: 1 } to { opacity: 0 } }
+      `}</style>
     </div>
   )
 }
